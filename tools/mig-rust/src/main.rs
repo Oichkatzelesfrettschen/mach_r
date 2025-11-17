@@ -2,9 +2,10 @@ use clap::Parser;
 use std::path::PathBuf;
 use std::fs;
 
-use mig_rust::{SimpleLexer, Subsystem};
+use mig_rust::{SimpleLexer, Subsystem, SemanticAnalyzer, AnalyzedSubsystem};
 use mig_rust::parser::Parser as MigParser;
 use mig_rust::codegen::c_generator::CCodeGenerator;
+use mig_rust::codegen::c_user_stubs::CUserStubGenerator;
 use mig_rust::codegen::CodeGenerator;
 
 #[derive(Parser)]
@@ -82,6 +83,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("    Statements: {}", subsystem.statements.len());
         }
 
+        // Semantic analysis
+        if cli.verbose {
+            println!("  Analyzing...");
+        }
+        let mut analyzer = SemanticAnalyzer::new();
+        let analyzed = analyzer.analyze(&subsystem)
+            .map_err(|e| format!("Semantic error: {}", e))?;
+
+        if cli.verbose {
+            println!("    Routines: {}", analyzed.routines.len());
+            println!("    Server prefix: {}", analyzed.server_prefix);
+            println!("    User prefix: {}", analyzed.user_prefix);
+        }
+
         // If check-only mode, stop here
         if cli.check {
             println!("✓ {} - Syntax OK", file_path.display());
@@ -99,7 +114,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         if cli.user || generate_all {
-            generate_c_user(&subsystem, &c_gen, &cli.output, cli.verbose)?;
+            generate_c_user(&analyzed, &cli.output, cli.verbose)?;
         }
 
         if cli.server || generate_all {
@@ -138,8 +153,7 @@ fn generate_c_header(
 }
 
 fn generate_c_user(
-    subsystem: &Subsystem,
-    generator: &CCodeGenerator,
+    analyzed: &AnalyzedSubsystem,
     output_dir: &PathBuf,
     verbose: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -147,8 +161,9 @@ fn generate_c_user(
         println!("  Generating C user stubs...");
     }
 
-    let user_impl = generator.generate_user_impl(subsystem)?;
-    let user_path = output_dir.join(format!("{}User.c", subsystem.name));
+    let generator = CUserStubGenerator::new();
+    let user_impl = generator.generate(analyzed)?;
+    let user_path = output_dir.join(format!("{}User.c", analyzed.name));
     fs::write(&user_path, user_impl)?;
 
     if verbose {

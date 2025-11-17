@@ -2,11 +2,13 @@ pub mod lexer;
 pub mod parser;
 pub mod types;
 pub mod codegen;
+pub mod semantic;
 
 // Re-export main types
 pub use lexer::simple::SimpleLexer;
 pub use parser::{Parser, ParseError};
 pub use parser::ast::*;
+pub use semantic::{SemanticAnalyzer, AnalyzedSubsystem, AnalyzedRoutine};
 
 #[cfg(test)]
 mod tests {

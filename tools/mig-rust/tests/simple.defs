@@ -1,0 +1,19 @@
+/* Simple test subsystem for MIG */
+
+subsystem simple 1000;
+
+#include <mach/std_types.defs>
+
+import <mach/mach_types.h>;
+
+/* Simple addition routine */
+routine add(
+        server_port : mach_port_t;
+    in  a : int32_t;
+    in  b : int32_t;
+    out result : int32_t);
+
+/* Simple routine with no output */
+simpleroutine log_message(
+        server_port : mach_port_t;
+    in  message : int32_t);

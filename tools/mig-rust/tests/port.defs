@@ -1,0 +1,23 @@
+/* Port rights test subsystem for MIG */
+
+subsystem port_test 3000;
+
+#include <mach/std_types.defs>
+
+import <mach/mach_types.h>;
+
+/* Create a new port */
+routine create_port(
+        server_port : mach_port_t;
+    out new_port : mach_port_t);
+
+/* Destroy a port */
+simpleroutine destroy_port(
+        server_port : mach_port_t;
+    in  port : mach_port_t);
+
+/* Get port rights */
+routine get_port_rights(
+        server_port : mach_port_t;
+    in  port : mach_port_t;
+    out rights : int32_t);

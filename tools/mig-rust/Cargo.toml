@@ -3,7 +3,11 @@ name = "mig-rust"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "mig"
+path = "src/main.rs"
+
 [dependencies]
-clap = "4.5.51"
+clap = { version = "4.5.51", features = ["derive"] }
 nom = "8.0.0"
 serde = { version = "1.0.228", features = ["derive"] }

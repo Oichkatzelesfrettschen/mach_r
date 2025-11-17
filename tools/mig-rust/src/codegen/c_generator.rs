@@ -104,6 +104,33 @@ impl CodeGenerator for CCodeGenerator {
 }
 
 impl CCodeGenerator {
+    /// Map MIG type to C type
+    fn map_type(&self, type_spec: &TypeSpec) -> String {
+        match type_spec {
+            TypeSpec::Basic(name) => {
+                // Map common Mach types
+                match name.as_str() {
+                    "mach_port_t" => "mach_port_t".to_string(),
+                    "int32_t" => "int32_t".to_string(),
+                    "int" => "int".to_string(),
+                    "uint32_t" => "uint32_t".to_string(),
+                    _ => name.clone(),
+                }
+            }
+            TypeSpec::Array { element, .. } => {
+                format!("{}*", self.map_type(element))
+            }
+            TypeSpec::Pointer(inner) => {
+                format!("{}*", self.map_type(inner))
+            }
+            TypeSpec::Struct(_) => "void*".to_string(), // TODO: proper struct handling
+            TypeSpec::StructArray { element, .. } => {
+                format!("{}*", self.map_type(element))
+            }
+            TypeSpec::CString { .. } => "char*".to_string(),
+        }
+    }
+
     fn generate_user_prototype(&self, routine: &Routine) -> Result<String, CodegenError> {
         let mut proto = String::new();
 
@@ -112,7 +139,52 @@ impl CCodeGenerator {
         proto.push_str(&routine.name);
         proto.push_str("(\n");
 
-        // TODO: Generate parameters from arguments
+        // Generate parameters from arguments
+        let mut first = true;
+        for arg in &routine.args {
+            if !first {
+                proto.push_str(",\n");
+            }
+            first = false;
+
+            proto.push_str("    ");
+
+            // Add direction qualifier
+            match arg.direction {
+                Direction::Out | Direction::InOut => {
+                    let c_type = self.map_type(&arg.arg_type);
+                    // Out parameters are always pointers
+                    if c_type.ends_with('*') {
+                        proto.push_str(&c_type);
+                    } else {
+                        proto.push_str(&format!("{}*", c_type));
+                    }
+                }
+                Direction::In => {
+                    proto.push_str(&self.map_type(&arg.arg_type));
+                }
+                Direction::RequestPort | Direction::ReplyPort
+                | Direction::SReplyPort | Direction::UReplyPort => {
+                    proto.push_str("mach_port_t");
+                }
+                Direction::WaitTime => {
+                    proto.push_str("mach_msg_timeout_t");
+                }
+                Direction::MsgOption => {
+                    proto.push_str("mach_msg_option_t");
+                }
+                Direction::MsgSeqno => {
+                    proto.push_str("mach_port_seqno_t");
+                }
+            }
+
+            proto.push(' ');
+            proto.push_str(&arg.name);
+        }
+
+        if routine.args.is_empty() {
+            proto.push_str("    void");
+        }
 
         proto.push_str(");\n");
 

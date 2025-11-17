@@ -87,6 +87,16 @@ impl Parser {
                 self.expect_symbol(Symbol::Semicolon)?;
                 Ok(Statement::Skip)
             }
+            // Skip preprocessor directives (e.g., #include)
+            Some(Token::Preprocessor(_)) => {
+                self.advance();
+                self.parse_statement() // Continue to next statement
+            }
+            // Skip comments
+            Some(Token::Comment) => {
+                self.advance();
+                self.parse_statement() // Continue to next statement
+            }
             _ => Err(self.error("Expected statement (type, routine, import, skip)")),
         }
     }
@@ -338,10 +348,45 @@ impl Parser {
         }
     }
 
-    /// Parse import: import "file";
+    /// Parse import: import "file"; or import <file>;
     fn parse_import(&mut self, kind: ImportKind) -> Result<Import, ParseError> {
         self.advance(); // Skip import keyword
-        let file = self.expect_string()?;
+
+        // Check if it's angle bracket import <file> or quoted "file"
+        let file = if matches!(self.peek(), Some(Token::Symbol(Symbol::LessThan))) {
+            self.advance(); // Skip <
+
+            // Build path from tokens until we hit >
+            let mut path = String::new();
+            loop {
+                match self.peek() {
+                    Some(Token::Symbol(Symbol::GreaterThan)) => break,
+                    Some(Token::Identifier(name)) => {
+                        path.push_str(name);
+                        self.advance();
+                    }
+                    Some(Token::Symbol(Symbol::Slash)) => {
+                        path.push('/');
+                        self.advance();
+                    }
+                    Some(Token::Symbol(Symbol::Dot)) => {
+                        path.push('.');
+                        self.advance();
+                    }
+                    Some(Token::Number(n)) => {
+                        path.push_str(&n.to_string());
+                        self.advance();
+                    }
+                    _ => return Err(self.error("Unexpected token in import path")),
+                }
+            }
+
+            self.expect_symbol(Symbol::GreaterThan)?;
+            path
+        } else {
+            self.expect_string()?
+        };
+
         self.expect_symbol(Symbol::Semicolon)?;
 
         Ok(Import { kind, file })

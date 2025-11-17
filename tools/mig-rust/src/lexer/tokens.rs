@@ -55,6 +55,8 @@ pub enum Keyword {
     // Special directives
     RCSId,
     Skip,
+    ServerPrefix,
+    UserPrefix,
 
     // Argument directions
     In,
@@ -105,6 +107,8 @@ impl Keyword {
             Keyword::SImport => "simport",
             Keyword::RCSId => "RCSId",
             Keyword::Skip => "skip",
+            Keyword::ServerPrefix => "ServerPrefix",
+            Keyword::UserPrefix => "UserPrefix",
             Keyword::In => "in",
             Keyword::Out => "out",
             Keyword::InOut => "inout",

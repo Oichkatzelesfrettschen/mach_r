@@ -24,6 +24,8 @@ pub enum Statement {
     SimpleRoutine(Routine),
     Import(Import),
     Skip,
+    ServerPrefix(String),
+    UserPrefix(String),
 }
 
 /// Type declaration: type name = typespec [annotations];

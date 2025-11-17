@@ -241,6 +241,8 @@ impl SimpleLexer {
             "simport" => Some(Keyword::SImport),
             "rcsid" => Some(Keyword::RCSId),
             "skip" => Some(Keyword::Skip),
+            "serverprefix" => Some(Keyword::ServerPrefix),
+            "userprefix" => Some(Keyword::UserPrefix),
             "in" => Some(Keyword::In),
             "out" => Some(Keyword::Out),
             "inout" => Some(Keyword::InOut),

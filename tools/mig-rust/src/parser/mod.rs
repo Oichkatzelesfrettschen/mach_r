@@ -87,6 +87,18 @@ impl Parser {
                 self.expect_symbol(Symbol::Semicolon)?;
                 Ok(Statement::Skip)
             }
+            Some(Token::Keyword(Keyword::ServerPrefix)) => {
+                self.advance();
+                let prefix = self.expect_identifier()?;
+                self.expect_symbol(Symbol::Semicolon)?;
+                Ok(Statement::ServerPrefix(prefix))
+            }
+            Some(Token::Keyword(Keyword::UserPrefix)) => {
+                self.advance();
+                let prefix = self.expect_identifier()?;
+                self.expect_symbol(Symbol::Semicolon)?;
+                Ok(Statement::UserPrefix(prefix))
+            }
             // Skip preprocessor directives (e.g., #include)
             Some(Token::Preprocessor(_)) => {
                 self.advance();
@@ -97,7 +109,7 @@ impl Parser {
                 self.advance();
                 self.parse_statement() // Continue to next statement
             }
-            _ => Err(self.error("Expected statement (type, routine, import, skip)")),
+            _ => Err(self.error("Expected statement (type, routine, import, skip, prefix)")),
         }
     }
 

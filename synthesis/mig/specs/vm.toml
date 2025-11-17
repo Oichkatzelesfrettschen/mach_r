@@ -1,0 +1,39 @@
+name = "vm"
+subsystem = 2000
+
+[[routines]]
+name = "allocate"
+id = 2000
+[[routines.inputs]]
+name = "size"
+type = "u64"
+[[routines.inputs]]
+name = "protection"
+type = "u32"
+[[routines.outputs]]
+name = "addr"
+type = "u64"
+
+[[routines]]
+name = "deallocate"
+id = 2001
+[[routines.inputs]]
+name = "addr"
+type = "u64"
+[[routines.inputs]]
+name = "size"
+type = "u64"
+
+[[routines]]
+name = "protect"
+id = 2002
+[[routines.inputs]]
+name = "addr"
+type = "u64"
+[[routines.inputs]]
+name = "size"
+type = "u64"
+[[routines.inputs]]
+name = "protection"
+type = "u32"
+

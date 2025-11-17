@@ -1,0 +1,30 @@
+name = "name_server"
+subsystem = 1000
+
+[[routines]]
+name = "register"
+id = 1000
+[[routines.inputs]]
+name = "name"
+type = "string"
+[[routines.inputs]]
+name = "port"
+type = "port"
+
+[[routines]]
+name = "lookup"
+id = 1001
+[[routines.inputs]]
+name = "name"
+type = "string"
+[[routines.outputs]]
+name = "port"
+type = "port"
+
+[[routines]]
+name = "unregister"
+id = 1002
+[[routines.inputs]]
+name = "name"
+type = "string"
+

@@ -38,5 +38,4 @@ panic = "abort"     # Don't unwind on panic in dev either
 members = [
     ".",
     "xtask",
-    "tools/mig-rust",
 ]

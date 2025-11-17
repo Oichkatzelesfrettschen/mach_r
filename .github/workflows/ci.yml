@@ -1,0 +1,175 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint-and-test:
+    name: Lint and Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14]
+    defaults:
+      run:
+        working-directory: synthesis
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            synthesis -> target
+
+      - name: Format check
+        run: cargo fmt --all -- --check
+
+      - name: Clippy (deny warnings)
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+      - name: Unit tests (library only)
+        run: cargo test --workspace --lib
+
+      - name: Build docs (no deps)
+        run: cargo doc --workspace --no-deps
+
+  xtask-build:
+    name: xtask build (macOS/Apple Silicon)
+    runs-on: macos-14
+    defaults:
+      run:
+        working-directory: synthesis
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            synthesis -> target
+
+      - name: Build xtask utility
+        run: cargo build -p xtask
+
+      - name: Build kernel (aarch64)
+        run: cargo run -p xtask -- kernel
+
+      - name: Upload kernel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mach_r-kernel
+          path: |
+            synthesis/build/dist/mach_r_kernel.elf
+            synthesis/build/dist/mach_r_kernel.bin
+            synthesis/build/dist/SHA256SUMS
+            synthesis/build/dist/MANIFEST.json
+
+  disk-image-ubuntu:
+    name: Build disk image (Ubuntu)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: synthesis
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install qemu-utils and genisoimage
+        run: sudo apt-get update && sudo apt-get install -y qemu-utils genisoimage
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            synthesis -> target
+      - name: Build kernel ELF via xtask
+        run: cargo run -p xtask -- kernel
+      - name: Create filesystem and disk image
+        run: |
+          cargo run -p xtask -- filesystem
+          cargo run -p xtask -- disk-image --with-sysroot
+      - name: Build ISO image
+        run: cargo run -p xtask -- iso-image
+
+      - name: Upload disk artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mach_r-disk-images
+          path: |
+            synthesis/build/images/mach_r.qcow2
+            synthesis/build/images/mach_r.iso
+          retention-days: 10
+
+      - name: Upload checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: mach_r-checksums
+          path: |
+            synthesis/build/dist/SHA256SUMS
+            synthesis/build/dist/MANIFEST.json
+          retention-days: 10
+
+  nightly-clippy:
+    name: Nightly Clippy (ubuntu)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    defaults:
+      run:
+        working-directory: synthesis
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install nightly toolchain
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: clippy
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            synthesis -> target
+      - name: Clippy nightly (warnings)
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+  docs-book:
+    name: Build mdBook (Ubuntu)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install mdBook
+        run: cargo install mdbook --locked
+      - name: Build book
+        run: mdbook build docs/book
+      - name: Upload book artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mach_r-book
+          path: docs/book/build
+          retention-days: 7

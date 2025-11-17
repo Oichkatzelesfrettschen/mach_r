@@ -1,0 +1,139 @@
+# Mach_R Kernel Makefile
+# Supports ARM64 and x86_64 targets
+
+# Default target
+TARGET ?= aarch64
+
+# Rust toolchain
+CARGO = ~/.cargo/bin/cargo
+RUSTC = ~/.cargo/bin/rustc
+RUSTFLAGS = 
+
+# QEMU settings
+QEMU_AARCH64 = qemu-system-aarch64
+QEMU_X86_64 = qemu-system-x86_64
+QEMU_MEMORY = 512M
+QEMU_CPUS = 4
+
+# Build directories
+BUILD_DIR = target
+KERNEL_AARCH64 = $(BUILD_DIR)/aarch64-unknown-none/release/mach_r
+KERNEL_X86_64 = $(BUILD_DIR)/x86_64-unknown-none/release/mach_r
+
+.PHONY: all clean run-aarch64 run-x86_64 build-aarch64 build-x86_64 test doc
+
+all: build-$(TARGET)
+
+# Build for ARM64
+build-aarch64:
+	@echo "Building Mach_R for ARM64..."
+	@~/.cargo/bin/rustup target add aarch64-unknown-none --toolchain nightly 2>/dev/null || true
+	RUSTFLAGS="$(RUSTFLAGS)" $(CARGO) +nightly build --release --bin mach_r --target aarch64-unknown-none
+	@echo "Kernel built: $(KERNEL_AARCH64)"
+
+# Build for x86_64
+build-x86_64:
+	@echo "Building Mach_R for x86_64..."
+	@~/.cargo/bin/rustup target add x86_64-unknown-none --toolchain nightly 2>/dev/null || true
+	RUSTFLAGS="$(RUSTFLAGS)" $(CARGO) +nightly build --release --bin mach_r --target x86_64-unknown-none
+	@echo "Kernel built: $(KERNEL_X86_64)"
+
+# Run ARM64 kernel in QEMU
+run-aarch64: build-aarch64
+	@echo "Running ARM64 kernel in QEMU..."
+	$(QEMU_AARCH64) \
+		-M virt \
+		-cpu cortex-a72 \
+		-smp $(QEMU_CPUS) \
+		-m $(QEMU_MEMORY) \
+		-kernel $(KERNEL_AARCH64) \
+		-serial stdio \
+		-display none \
+		-d guest_errors,unimp
+
+# Run x86_64 kernel in QEMU
+run-x86_64: build-x86_64
+	@echo "Running x86_64 kernel in QEMU..."
+	$(QEMU_X86_64) \
+		-machine q35 \
+		-cpu qemu64 \
+		-smp $(QEMU_CPUS) \
+		-m $(QEMU_MEMORY) \
+		-kernel $(KERNEL_X86_64) \
+		-serial stdio \
+		-display none \
+		-d guest_errors,unimp
+
+# Debug ARM64 kernel with GDB
+debug-aarch64: build-aarch64
+	@echo "Starting ARM64 kernel in QEMU with GDB server on :1234..."
+	$(QEMU_AARCH64) \
+		-M virt \
+		-cpu cortex-a72 \
+		-smp $(QEMU_CPUS) \
+		-m $(QEMU_MEMORY) \
+		-kernel $(KERNEL_AARCH64) \
+		-serial stdio \
+		-display none \
+		-s -S &
+	@echo "Connect with: gdb-multiarch $(KERNEL_AARCH64) -ex 'target remote :1234'"
+
+# Debug x86_64 kernel with GDB
+debug-x86_64: build-x86_64
+	@echo "Starting x86_64 kernel in QEMU with GDB server on :1234..."
+	$(QEMU_X86_64) \
+		-machine q35 \
+		-cpu qemu64 \
+		-smp $(QEMU_CPUS) \
+		-m $(QEMU_MEMORY) \
+		-kernel $(KERNEL_X86_64) \
+		-serial stdio \
+		-display none \
+		-s -S &
+	@echo "Connect with: gdb $(KERNEL_X86_64) -ex 'target remote :1234'"
+
+# Run tests
+test:
+	@echo "Running tests..."
+	$(CARGO) test --lib
+
+# Build documentation
+doc:
+	@echo "Building documentation..."
+	$(CARGO) doc --no-deps --open
+
+# Clean build artifacts
+clean:
+	@echo "Cleaning build artifacts..."
+	$(CARGO) clean
+	@rm -rf $(BUILD_DIR)
+
+# Install dependencies
+deps:
+	@echo "Installing dependencies..."
+	@command -v $(QEMU_AARCH64) >/dev/null 2>&1 || echo "Warning: $(QEMU_AARCH64) not found. Install with: brew install qemu"
+	@command -v $(QEMU_X86_64) >/dev/null 2>&1 || echo "Warning: $(QEMU_X86_64) not found. Install with: brew install qemu"
+	@rustup target add aarch64-unknown-none || true
+	@rustup target add x86_64-unknown-none || true
+	@rustup component add rust-src || true
+
+# Show help
+help:
+	@echo "Mach_R Kernel Build System"
+	@echo ""
+	@echo "Targets:"
+	@echo "  make build-aarch64  - Build ARM64 kernel"
+	@echo "  make build-x86_64   - Build x86_64 kernel"
+	@echo "  make run-aarch64    - Run ARM64 kernel in QEMU"
+	@echo "  make run-x86_64     - Run x86_64 kernel in QEMU"
+	@echo "  make debug-aarch64  - Debug ARM64 kernel with GDB"
+	@echo "  make debug-x86_64   - Debug x86_64 kernel with GDB"
+	@echo "  make test           - Run unit tests"
+	@echo "  make doc            - Build documentation"
+	@echo "  make clean          - Clean build artifacts"
+	@echo "  make deps           - Install dependencies"
+	@echo ""
+	@echo "Variables:"
+	@echo "  TARGET=$(TARGET) (default: aarch64, options: aarch64, x86_64)"
+	@echo "  QEMU_MEMORY=$(QEMU_MEMORY)"
+	@echo "  QEMU_CPUS=$(QEMU_CPUS)"

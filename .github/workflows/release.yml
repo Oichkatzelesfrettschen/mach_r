@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: synthesis
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install tools
+        run: sudo apt-get update && sudo apt-get install -y qemu-utils genisoimage
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            synthesis -> target
+
+      - name: Build artifacts via xtask
+        run: |
+          cargo run -p xtask -- kernel
+          cargo run -p xtask -- filesystem
+          cargo run -p xtask -- disk-image
+          cargo run -p xtask -- iso-image
+
+      - name: Prepare release assets
+        run: |
+          ls -l build/dist
+          ls -l build/images
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            synthesis/build/dist/mach_r_kernel.elf
+            synthesis/build/dist/mach_r_kernel.bin
+            synthesis/build/dist/SHA256SUMS
+            synthesis/build/dist/MANIFEST.json
+            synthesis/build/images/mach_r.qcow2
+            synthesis/build/images/mach_r.iso
+          draft: false
+          prerelease: false

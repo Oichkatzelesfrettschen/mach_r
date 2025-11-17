@@ -1,1 +1,96 @@
-/target
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Rust
+target/
+*.rs.bk
+*.pdb
+.rustc_info.json
+CACHEDIR.TAG
+
+# Build artifacts and outputs
+build/
+dist/
+*.o
+*.a
+*.so
+*.dylib
+*.elf
+*.bin
+*.img
+*.iso
+*.dmg
+*.d
+*.rcgu.o
+
+# IDEs and editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.fleet/
+.project
+.settings/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+venv/
+ENV/
+.venv
+
+# Analysis outputs
+*_analysis.json
+*_results.json
+audit_*.json
+real_inventory.json
+dependencies.json
+ipc_analysis.json
+brutal_audit.json
+*.png
+*.dot
+
+# Temporary files
+*.tmp
+*.bak
+*.log
+test_simple
+
+# QEMU and emulation
+*.qcow2
+*.vdi
+*.vmdk
+*.utm/
+
+# Archives (not including source code archives in archive/ directory)
+*.tar.gz
+*.tar.bz2
+*.zip
+*.7z
+
+# Reference material (too large for git)
+reference/sources/
+reference/extracted/
+archive/
+
+# Documentation builds
+docs/_build/
+docs/.doctrees/
+
+# Test outputs
+test_output/
+*.test
+
+# Docker
+.dockerignore
+
+# Keep these important files
+!Cargo.lock
+!*/Cargo.lock
+!build-config.toml

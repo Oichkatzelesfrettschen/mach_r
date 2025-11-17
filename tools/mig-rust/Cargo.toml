@@ -1,0 +1,9 @@
+[package]
+name = "mig-rust"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+clap = "4.5.51"
+nom = "8.0.0"
+serde = { version = "1.0.228", features = ["derive"] }

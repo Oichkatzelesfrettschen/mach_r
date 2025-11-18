@@ -1,13 +1,16 @@
 [package]
 name = "mig-rust"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
+authors = ["Claude Code <noreply@anthropic.com>"]
+description = "Pure Rust implementation of Mach Interface Generator (MIG)"
+license = "MIT"
+repository = "https://github.com/Oichkatzelesfrettschen/mach_r"
 
 [[bin]]
 name = "mig"
 path = "src/main.rs"
 
 [dependencies]
+# Pure Rust CLI argument parsing
 clap = { version = "4.5.51", features = ["derive"] }
-nom = "8.0.0"
-serde = { version = "1.0.228", features = ["derive"] }

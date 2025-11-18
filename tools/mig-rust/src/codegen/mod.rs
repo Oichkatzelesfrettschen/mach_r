@@ -3,6 +3,7 @@
 pub mod c_generator;
 pub mod rust_generator;
 pub mod c_user_stubs;
+pub mod c_server_stubs;
 
 use crate::parser::ast::Subsystem;
 

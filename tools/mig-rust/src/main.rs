@@ -6,6 +6,7 @@ use mig_rust::{SimpleLexer, Subsystem, SemanticAnalyzer, AnalyzedSubsystem};
 use mig_rust::parser::Parser as MigParser;
 use mig_rust::codegen::c_generator::CCodeGenerator;
 use mig_rust::codegen::c_user_stubs::CUserStubGenerator;
+use mig_rust::codegen::c_server_stubs::CServerStubGenerator;
 use mig_rust::codegen::CodeGenerator;
 
 #[derive(Parser)]
@@ -118,7 +119,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         if cli.server || generate_all {
-            generate_c_server(&subsystem, &c_gen, &cli.output, cli.verbose)?;
+            generate_c_server(&analyzed, &cli.output, cli.verbose)?;
         }
 
         if cli.rust {
@@ -174,8 +175,7 @@ fn generate_c_user(
 }
 
 fn generate_c_server(
-    subsystem: &Subsystem,
-    generator: &CCodeGenerator,
+    analyzed: &AnalyzedSubsystem,
     output_dir: &PathBuf,
     verbose: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -183,16 +183,12 @@ fn generate_c_server(
         println!("  Generating C server stubs...");
     }
 
-    let server_header = generator.generate_server_header(subsystem)?;
-    let server_header_path = output_dir.join(format!("{}Server.h", subsystem.name));
-    fs::write(&server_header_path, server_header)?;
-
-    let server_impl = generator.generate_server_impl(subsystem)?;
-    let server_path = output_dir.join(format!("{}Server.c", subsystem.name));
+    let generator = CServerStubGenerator::new();
+    let server_impl = generator.generate(analyzed)?;
+    let server_path = output_dir.join(format!("{}Server.c", analyzed.name));
     fs::write(&server_path, server_impl)?;
 
     if verbose {
-        println!("    → {}", server_header_path.display());
         println!("    → {}", server_path.display());
     }
 

@@ -147,34 +147,26 @@ impl CUserStubGenerator {
         output.push_str("    typedef struct {\n");
         output.push_str("        mach_msg_header_t Head;\n");
 
-        // Add fields for IN parameters
-        for arg in &routine.routine.args {
-            if matches!(arg.direction, Direction::In | Direction::InOut) {
-                output.push_str(&format!("        mach_msg_type_t {}Type;\n", arg.name));
-                let c_type = self.get_c_type_for_arg(arg);
-                output.push_str(&format!("        {} {};\n", c_type, arg.name));
-            }
+        // Add fields from request layout
+        for field in &routine.request_layout.fields {
+            output.push_str(&format!("        {} {};\n", field.c_type, field.name));
         }
 
         output.push_str("    } Request;\n\n");
 
         // Reply structure (if not simpleroutine)
         if !routine.is_simple {
-            output.push_str("    typedef struct {\n");
-            output.push_str("        mach_msg_header_t Head;\n");
-            output.push_str("        mach_msg_type_t RetCodeType;\n");
-            output.push_str("        kern_return_t RetCode;\n");
+            if let Some(ref reply_layout) = routine.reply_layout {
+                output.push_str("    typedef struct {\n");
+                output.push_str("        mach_msg_header_t Head;\n");
 
-            // Add fields for OUT parameters
-            for arg in &routine.routine.args {
-                if matches!(arg.direction, Direction::Out | Direction::InOut) {
-                    output.push_str(&format!("        mach_msg_type_t {}Type;\n", arg.name));
-                    let c_type = self.get_c_type_for_arg(arg);
-                    output.push_str(&format!("        {} {};\n", c_type, arg.name));
+                // Add fields from reply layout
+                for field in &reply_layout.fields {
+                    output.push_str(&format!("        {} {};\n", field.c_type, field.name));
                 }
-            }
 
-            output.push_str("    } Reply;\n\n");
+                output.push_str("    } Reply;\n\n");
+            }
         }
 
         // Union for alignment
@@ -194,19 +186,27 @@ impl CUserStubGenerator {
 
         output.push_str("    /* Pack input parameters */\n");
 
-        for arg in &routine.routine.args {
-            if matches!(arg.direction, Direction::In | Direction::InOut) {
+        for field in &routine.request_layout.fields {
+            if field.is_type_descriptor {
                 // Type descriptor
-                output.push_str(&format!("    Mess.In.{}Type.msgt_name = MACH_MSG_TYPE_INTEGER_32;\n", arg.name));
-                output.push_str(&format!("    Mess.In.{}Type.msgt_size = 32;\n", arg.name));
-                output.push_str(&format!("    Mess.In.{}Type.msgt_number = 1;\n", arg.name));
-                output.push_str(&format!("    Mess.In.{}Type.msgt_inline = TRUE;\n", arg.name));
-                output.push_str(&format!("    Mess.In.{}Type.msgt_longform = FALSE;\n", arg.name));
-                output.push_str(&format!("    Mess.In.{}Type.msgt_deallocate = FALSE;\n", arg.name));
-                output.push_str(&format!("    Mess.In.{}Type.msgt_unused = 0;\n", arg.name));
-
-                // Data
-                output.push_str(&format!("    Mess.In.{} = {};\n", arg.name, arg.name));
+                let base_name = field.name.strip_suffix("Type").unwrap_or(&field.name);
+                output.push_str(&format!("    Mess.In.{}.msgt_name = MACH_MSG_TYPE_INTEGER_32;\n", field.name));
+                output.push_str(&format!("    Mess.In.{}.msgt_size = 32;\n", field.name));
+                output.push_str(&format!("    Mess.In.{}.msgt_number = 1;\n", field.name));
+                output.push_str(&format!("    Mess.In.{}.msgt_inline = TRUE;\n", field.name));
+                output.push_str(&format!("    Mess.In.{}.msgt_longform = FALSE;\n", field.name));
+                output.push_str(&format!("    Mess.In.{}.msgt_deallocate = FALSE;\n", field.name));
+                output.push_str(&format!("    Mess.In.{}.msgt_unused = 0;\n", field.name));
+            } else if field.is_count_field {
+                // Count field - for now, set to max or 0 (TODO: get actual count from parameter)
+                let count = field.max_array_elements.unwrap_or(0);
+                output.push_str(&format!("    Mess.In.{} = {}; /* TODO: use actual array count */\n", field.name, count));
+            } else if !field.is_array {
+                // Regular data field
+                output.push_str(&format!("    Mess.In.{} = {};\n", field.name, field.name));
+            } else {
+                // Array data field
+                output.push_str(&format!("    Mess.In.{} = {}; /* TODO: handle array data */\n", field.name, field.name));
             }
         }
 
@@ -220,9 +220,16 @@ impl CUserStubGenerator {
 
         output.push_str("    /* Unpack output parameters */\n");
 
-        for arg in &routine.routine.args {
-            if matches!(arg.direction, Direction::Out | Direction::InOut) {
-                output.push_str(&format!("    *{} = Mess.Out.{};\n", arg.name, arg.name));
+        if let Some(ref reply_layout) = routine.reply_layout {
+            for field in &reply_layout.fields {
+                // Skip type descriptors, RetCode, and count fields (for now)
+                if !field.is_type_descriptor && field.name != "RetCode" && !field.is_count_field {
+                    if field.is_array {
+                        output.push_str(&format!("    *{} = Mess.Out.{}; /* TODO: handle array unpacking */\n", field.name, field.name));
+                    } else {
+                        output.push_str(&format!("    *{} = Mess.Out.{};\n", field.name, field.name));
+                    }
+                }
             }
         }
 

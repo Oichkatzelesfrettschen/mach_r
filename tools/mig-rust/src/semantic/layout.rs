@@ -33,6 +33,12 @@ pub struct MessageField {
     pub size: FieldSize,
     /// Is this a type descriptor field?
     pub is_type_descriptor: bool,
+    /// Is this an array type?
+    pub is_array: bool,
+    /// Is this a count field for an array?
+    pub is_count_field: bool,
+    /// Maximum array elements (for variable arrays)
+    pub max_array_elements: Option<u32>,
 }
 
 /// Field size information
@@ -73,6 +79,37 @@ impl<'a> MessageLayoutCalculator<'a> {
             match arg.direction {
                 Direction::In | Direction::InOut => {
                     if let Some(field) = self.create_message_field(arg, current_offset) {
+                        // Add type descriptor (8 bytes: mach_msg_type_t)
+                        layout.fields.push(MessageField {
+                            name: format!("{}Type", arg.name),
+                            c_type: "mach_msg_type_t".to_string(),
+                            offset: Some(current_offset),
+                            size: FieldSize::Fixed(8),
+                            is_type_descriptor: true,
+                            is_array: false,
+                            is_count_field: false,
+                            max_array_elements: None,
+                        });
+                        current_offset += 8;
+                        layout.body_fixed_size += 8;
+
+                        // For variable arrays, add count field
+                        if field.is_array {
+                            layout.fields.push(MessageField {
+                                name: format!("{}Cnt", arg.name),
+                                c_type: "mach_msg_type_number_t".to_string(),
+                                offset: Some(current_offset),
+                                size: FieldSize::Fixed(4),
+                                is_type_descriptor: false,
+                                is_array: false,
+                                is_count_field: true,
+                                max_array_elements: None,
+                            });
+                            current_offset += 4;
+                            layout.body_fixed_size += 4;
+                        }
+
+                        // Add data field
                         match field.size {
                             FieldSize::Fixed(size) => {
                                 layout.body_fixed_size += size;
@@ -82,15 +119,6 @@ impl<'a> MessageLayoutCalculator<'a> {
                                 layout.body_variable_max += max;
                             }
                         }
-
-                        // Add type descriptor (8 bytes: mach_msg_type_t)
-                        layout.fields.push(MessageField {
-                            name: format!("{}Type", arg.name),
-                            c_type: "mach_msg_type_t".to_string(),
-                            offset: Some(current_offset - field.size.bytes()),
-                            size: FieldSize::Fixed(8),
-                            is_type_descriptor: true,
-                        });
 
                         layout.fields.push(field);
                     }
@@ -125,6 +153,9 @@ impl<'a> MessageLayoutCalculator<'a> {
             offset: Some(current_offset),
             size: FieldSize::Fixed(8),
             is_type_descriptor: true,
+            is_array: false,
+            is_count_field: false,
+            max_array_elements: None,
         });
         current_offset += 8;
 
@@ -134,6 +165,9 @@ impl<'a> MessageLayoutCalculator<'a> {
             offset: Some(current_offset),
             size: FieldSize::Fixed(4),
             is_type_descriptor: false,
+            is_array: false,
+            is_count_field: false,
+            max_array_elements: None,
         });
         current_offset += 4;
         layout.body_fixed_size += 12; // RetCodeType (8) + RetCode (4)
@@ -143,6 +177,37 @@ impl<'a> MessageLayoutCalculator<'a> {
             match arg.direction {
                 Direction::Out | Direction::InOut => {
                     if let Some(field) = self.create_message_field(arg, current_offset) {
+                        // Add type descriptor
+                        layout.fields.push(MessageField {
+                            name: format!("{}Type", arg.name),
+                            c_type: "mach_msg_type_t".to_string(),
+                            offset: Some(current_offset),
+                            size: FieldSize::Fixed(8),
+                            is_type_descriptor: true,
+                            is_array: false,
+                            is_count_field: false,
+                            max_array_elements: None,
+                        });
+                        current_offset += 8;
+                        layout.body_fixed_size += 8;
+
+                        // For variable arrays, add count field
+                        if field.is_array {
+                            layout.fields.push(MessageField {
+                                name: format!("{}Cnt", arg.name),
+                                c_type: "mach_msg_type_number_t".to_string(),
+                                offset: Some(current_offset),
+                                size: FieldSize::Fixed(4),
+                                is_type_descriptor: false,
+                                is_array: false,
+                                is_count_field: true,
+                                max_array_elements: None,
+                            });
+                            current_offset += 4;
+                            layout.body_fixed_size += 4;
+                        }
+
+                        // Add data field
                         match field.size {
                             FieldSize::Fixed(size) => {
                                 layout.body_fixed_size += size;
@@ -152,15 +217,6 @@ impl<'a> MessageLayoutCalculator<'a> {
                                 layout.body_variable_max += max;
                             }
                         }
-
-                        // Add type descriptor
-                        layout.fields.push(MessageField {
-                            name: format!("{}Type", arg.name),
-                            c_type: "mach_msg_type_t".to_string(),
-                            offset: Some(current_offset - field.size.bytes()),
-                            size: FieldSize::Fixed(8),
-                            is_type_descriptor: true,
-                        });
 
                         layout.fields.push(field);
                     }
@@ -177,7 +233,37 @@ impl<'a> MessageLayoutCalculator<'a> {
 
     /// Create a message field from an argument
     fn create_message_field(&self, arg: &Argument, offset: usize) -> Option<MessageField> {
-        // Get the base type name
+        // Determine if this is an array type
+        let (is_array, max_elements) = match &arg.arg_type {
+            crate::parser::ast::TypeSpec::Array { size, .. } => {
+                let max = match size {
+                    crate::parser::ast::ArraySize::Fixed(n) => Some(*n),
+                    crate::parser::ast::ArraySize::VariableWithMax(n) => Some(*n),
+                    crate::parser::ast::ArraySize::Variable => None,
+                };
+                (true, max)
+            }
+            crate::parser::ast::TypeSpec::Basic(name) => {
+                // Check if the type itself is an array type
+                if let Ok(resolved) = self.type_resolver.lookup(name) {
+                    if resolved.is_array {
+                        let max = match resolved.array_size {
+                            Some(crate::parser::ast::ArraySize::Fixed(n)) => Some(n),
+                            Some(crate::parser::ast::ArraySize::VariableWithMax(n)) => Some(n),
+                            _ => None,
+                        };
+                        (true, max)
+                    } else {
+                        (false, None)
+                    }
+                } else {
+                    (false, None)
+                }
+            }
+            _ => (false, None),
+        };
+
+        // Get the base type name for C type lookup
         let type_name = match &arg.arg_type {
             crate::parser::ast::TypeSpec::Basic(name) => name.clone(),
             crate::parser::ast::TypeSpec::Array { element, .. } => {
@@ -206,6 +292,9 @@ impl<'a> MessageLayoutCalculator<'a> {
             offset: Some(offset),
             size,
             is_type_descriptor: false,
+            is_array,
+            is_count_field: false,
+            max_array_elements: max_elements,
         })
     }
 }

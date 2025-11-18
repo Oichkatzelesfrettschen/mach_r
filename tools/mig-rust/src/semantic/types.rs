@@ -287,3 +287,55 @@ impl Default for TypeResolver {
         Self::new()
     }
 }
+
+impl MachMsgType {
+    /// Convert MachMsgType to Mach IPC constant name
+    pub fn to_mach_constant(&self) -> &'static str {
+        match self {
+            MachMsgType::TypeBool => "MACH_MSG_TYPE_BOOLEAN",
+            MachMsgType::TypeInteger16 => "MACH_MSG_TYPE_INTEGER_16",
+            MachMsgType::TypeInteger32 => "MACH_MSG_TYPE_INTEGER_32",
+            MachMsgType::TypeInteger64 => "MACH_MSG_TYPE_INTEGER_64",
+            MachMsgType::TypeByte => "MACH_MSG_TYPE_BYTE",
+            MachMsgType::TypeChar => "MACH_MSG_TYPE_CHAR",
+            MachMsgType::TypeReal => "MACH_MSG_TYPE_REAL",
+            MachMsgType::TypeString => "MACH_MSG_TYPE_STRING",
+            MachMsgType::TypePort(disposition) => disposition.to_mach_constant(),
+            MachMsgType::TypePolymorphic => "MACH_MSG_TYPE_POLYMORPHIC",
+        }
+    }
+
+    /// Get the bit size of this type for msgt_size field
+    pub fn bit_size(&self) -> u32 {
+        match self {
+            MachMsgType::TypeBool => 32,
+            MachMsgType::TypeInteger16 => 16,
+            MachMsgType::TypeInteger32 => 32,
+            MachMsgType::TypeInteger64 => 64,
+            MachMsgType::TypeByte => 8,
+            MachMsgType::TypeChar => 8,
+            MachMsgType::TypeReal => 32,
+            MachMsgType::TypeString => 8,
+            MachMsgType::TypePort(_) => 32, // Port names are 32-bit
+            MachMsgType::TypePolymorphic => 32,
+        }
+    }
+}
+
+impl PortDisposition {
+    /// Convert PortDisposition to Mach IPC constant name
+    pub fn to_mach_constant(&self) -> &'static str {
+        match self {
+            PortDisposition::MoveReceive => "MACH_MSG_TYPE_MOVE_RECEIVE",
+            PortDisposition::CopySend => "MACH_MSG_TYPE_COPY_SEND",
+            PortDisposition::MakeSend => "MACH_MSG_TYPE_MAKE_SEND",
+            PortDisposition::MoveSend => "MACH_MSG_TYPE_MOVE_SEND",
+            PortDisposition::MakeSendOnce => "MACH_MSG_TYPE_MAKE_SEND_ONCE",
+            PortDisposition::MoveSendOnce => "MACH_MSG_TYPE_MOVE_SEND_ONCE",
+            PortDisposition::PortReceive => "MACH_MSG_TYPE_PORT_RECEIVE",
+            PortDisposition::PortSend => "MACH_MSG_TYPE_PORT_SEND",
+            PortDisposition::PortSendOnce => "MACH_MSG_TYPE_PORT_SEND_ONCE",
+            PortDisposition::PortName => "MACH_MSG_TYPE_PORT_NAME",
+        }
+    }
+}

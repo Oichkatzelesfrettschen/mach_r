@@ -27,6 +27,8 @@ pub struct MessageField {
     pub name: String,
     /// C type
     pub c_type: String,
+    /// Mach message type
+    pub mach_type: super::types::MachMsgType,
     /// Offset from message start (if fixed)
     pub offset: Option<usize>,
     /// Field size
@@ -83,6 +85,7 @@ impl<'a> MessageLayoutCalculator<'a> {
                         layout.fields.push(MessageField {
                             name: format!("{}Type", arg.name),
                             c_type: "mach_msg_type_t".to_string(),
+                            mach_type: super::types::MachMsgType::TypeInteger32, // Descriptor itself is not sent, this is placeholder
                             offset: Some(current_offset),
                             size: FieldSize::Fixed(8),
                             is_type_descriptor: true,
@@ -98,6 +101,7 @@ impl<'a> MessageLayoutCalculator<'a> {
                             layout.fields.push(MessageField {
                                 name: format!("{}Cnt", arg.name),
                                 c_type: "mach_msg_type_number_t".to_string(),
+                                mach_type: super::types::MachMsgType::TypeInteger32,
                                 offset: Some(current_offset),
                                 size: FieldSize::Fixed(4),
                                 is_type_descriptor: false,
@@ -150,6 +154,7 @@ impl<'a> MessageLayoutCalculator<'a> {
         layout.fields.push(MessageField {
             name: "RetCodeType".to_string(),
             c_type: "mach_msg_type_t".to_string(),
+            mach_type: super::types::MachMsgType::TypeInteger32,
             offset: Some(current_offset),
             size: FieldSize::Fixed(8),
             is_type_descriptor: true,
@@ -162,6 +167,7 @@ impl<'a> MessageLayoutCalculator<'a> {
         layout.fields.push(MessageField {
             name: "RetCode".to_string(),
             c_type: "kern_return_t".to_string(),
+            mach_type: super::types::MachMsgType::TypeInteger32,
             offset: Some(current_offset),
             size: FieldSize::Fixed(4),
             is_type_descriptor: false,
@@ -181,6 +187,7 @@ impl<'a> MessageLayoutCalculator<'a> {
                         layout.fields.push(MessageField {
                             name: format!("{}Type", arg.name),
                             c_type: "mach_msg_type_t".to_string(),
+                            mach_type: super::types::MachMsgType::TypeInteger32, // Placeholder
                             offset: Some(current_offset),
                             size: FieldSize::Fixed(8),
                             is_type_descriptor: true,
@@ -196,6 +203,7 @@ impl<'a> MessageLayoutCalculator<'a> {
                             layout.fields.push(MessageField {
                                 name: format!("{}Cnt", arg.name),
                                 c_type: "mach_msg_type_number_t".to_string(),
+                                mach_type: super::types::MachMsgType::TypeInteger32,
                                 offset: Some(current_offset),
                                 size: FieldSize::Fixed(4),
                                 is_type_descriptor: false,
@@ -286,9 +294,15 @@ impl<'a> MessageLayoutCalculator<'a> {
             _ => FieldSize::Fixed(4), // Default to 4 bytes
         };
 
+        // Get Mach message type
+        let mach_type = self.type_resolver.lookup(&type_name)
+            .map(|t| t.mach_type)
+            .unwrap_or(super::types::MachMsgType::TypeInteger32);
+
         Some(MessageField {
             name: arg.name.clone(),
             c_type,
+            mach_type,
             offset: Some(offset),
             size,
             is_type_descriptor: false,

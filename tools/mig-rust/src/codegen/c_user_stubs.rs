@@ -188,10 +188,19 @@ impl CUserStubGenerator {
 
         for field in &routine.request_layout.fields {
             if field.is_type_descriptor {
-                // Type descriptor
+                // Type descriptor - use actual field type
                 let base_name = field.name.strip_suffix("Type").unwrap_or(&field.name);
-                output.push_str(&format!("    Mess.In.{}.msgt_name = MACH_MSG_TYPE_INTEGER_32;\n", field.name));
-                output.push_str(&format!("    Mess.In.{}.msgt_size = 32;\n", field.name));
+
+                // Find the corresponding data field to get its mach_type
+                let data_field = routine.request_layout.fields.iter()
+                    .find(|f| f.name == base_name && !f.is_type_descriptor)
+                    .unwrap_or(field);
+
+                let mach_const = data_field.mach_type.to_mach_constant();
+                let bit_size = data_field.mach_type.bit_size();
+
+                output.push_str(&format!("    Mess.In.{}.msgt_name = {};\n", field.name, mach_const));
+                output.push_str(&format!("    Mess.In.{}.msgt_size = {};\n", field.name, bit_size));
                 output.push_str(&format!("    Mess.In.{}.msgt_number = 1;\n", field.name));
                 output.push_str(&format!("    Mess.In.{}.msgt_inline = TRUE;\n", field.name));
                 output.push_str(&format!("    Mess.In.{}.msgt_longform = FALSE;\n", field.name));

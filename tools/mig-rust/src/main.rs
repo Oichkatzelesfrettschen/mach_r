@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::fs;
 
 use mig_rust::{SimpleLexer, Subsystem, SemanticAnalyzer, AnalyzedSubsystem};
+use mig_rust::{PreprocessorConfig, PreprocessorFilter};
 use mig_rust::parser::Parser as MigParser;
 use mig_rust::codegen::c_generator::CCodeGenerator;
 use mig_rust::codegen::c_user_stubs::CUserStubGenerator;
@@ -65,10 +66,33 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("  Lexing...");
         }
         let mut lexer = SimpleLexer::new(input);
-        let tokens = lexer.tokenize().map_err(|e| format!("Lexer error: {}", e))?;
+        let mut tokens = lexer.tokenize().map_err(|e| format!("Lexer error: {}", e))?;
 
         if cli.verbose {
             println!("  Tokenized {} tokens", tokens.len());
+        }
+
+        // Preprocessing (conditional compilation)
+        if cli.verbose {
+            println!("  Preprocessing...");
+        }
+
+        // Determine which preprocessor config to use
+        let preproc_config = if cli.user && !cli.server {
+            PreprocessorConfig::for_user()
+        } else if cli.server && !cli.user {
+            PreprocessorConfig::for_server()
+        } else {
+            // For check mode or when generating both, use default (all undefined)
+            PreprocessorConfig::new()
+        };
+
+        let mut preproc_filter = PreprocessorFilter::new(preproc_config.symbols);
+        tokens = preproc_filter.filter(tokens)
+            .map_err(|e| format!("Preprocessor error: {}", e))?;
+
+        if cli.verbose {
+            println!("  After preprocessing: {} tokens", tokens.len());
         }
 
         // Parsing

@@ -190,11 +190,62 @@ impl CServerStubGenerator {
         Ok(output)
     }
 
-    /// Generate parameter extraction code
+    /// Generate parameter extraction code with validation
     fn generate_parameter_extraction(&self, routine: &AnalyzedRoutine) -> Result<String, CodegenError> {
         let mut output = String::new();
 
-        output.push_str("    /* Extract parameters */\n");
+        output.push_str("    /* Validate and extract parameters */\n");
+
+        // Validate type descriptors and extract array counts from request
+        for field in &routine.request_layout.fields {
+            if field.is_type_descriptor {
+                let base_name = field.name.strip_suffix("Type").unwrap_or(&field.name);
+
+                // Find the corresponding data field
+                let data_field = routine.request_layout.fields.iter()
+                    .find(|f| f.name == base_name && !f.is_type_descriptor)
+                    .unwrap_or(field);
+
+                let mach_const = data_field.mach_type.to_mach_constant();
+                let bit_size = data_field.mach_type.bit_size();
+
+                // Validate msgt_name
+                output.push_str(&format!("    if (In0P->{}.msgt_name != {}) {{\n", field.name, mach_const));
+                output.push_str("        return MIG_BAD_ARGUMENTS;\n");
+                output.push_str("    }\n");
+
+                // Validate msgt_size
+                output.push_str(&format!("    if (In0P->{}.msgt_size != {}) {{\n", field.name, bit_size));
+                output.push_str("        return MIG_BAD_ARGUMENTS;\n");
+                output.push_str("    }\n");
+
+                // For arrays, extract and validate count
+                if data_field.is_array {
+                    let count_name = format!("{}Cnt", base_name);
+                    output.push_str(&format!("    mach_msg_type_number_t {} = In0P->{}.msgt_number;\n",
+                        count_name, field.name));
+
+                    // Validate count bounds if there's a maximum
+                    if let Some(max) = data_field.max_array_elements {
+                        output.push_str(&format!("    if ({} > {}) {{\n", count_name, max));
+                        output.push_str("        return MIG_BAD_ARGUMENTS; /* Array count exceeds maximum */\n");
+                        output.push_str("    }\n");
+                    }
+                } else {
+                    // Non-array: validate msgt_number is 1
+                    output.push_str(&format!("    if (In0P->{}.msgt_number != 1) {{\n", field.name));
+                    output.push_str("        return MIG_BAD_ARGUMENTS;\n");
+                    output.push_str("    }\n");
+                }
+
+                // Validate inline flag
+                output.push_str(&format!("    if (!In0P->{}.msgt_inline) {{\n", field.name));
+                output.push_str("        return MIG_BAD_ARGUMENTS; /* Out-of-line not yet supported */\n");
+                output.push_str("    }\n");
+
+                output.push('\n');
+            }
+        }
 
         // Declare variables for OUT parameters
         for arg in &routine.routine.args {
@@ -203,9 +254,6 @@ impl CServerStubGenerator {
                 output.push_str(&format!("    {} {};\n", c_type, arg.name));
             }
         }
-
-        // For IN and INOUT, they're already in the message
-        // For OUT, we declared locals above
 
         output.push('\n');
         Ok(output)
@@ -273,27 +321,48 @@ impl CServerStubGenerator {
         output.push_str("    /* Pack reply */\n");
         output.push_str("    OutP->Head.msgh_size = sizeof(Reply);\n\n");
 
-        // Pack OUT and INOUT parameters
-        for arg in &routine.routine.args {
-            if matches!(arg.direction, Direction::Out | Direction::InOut) {
-                // Type descriptor
-                output.push_str(&format!("    OutP->{}Type.msgt_name = MACH_MSG_TYPE_INTEGER_32;\n", arg.name));
-                output.push_str(&format!("    OutP->{}Type.msgt_size = 32;\n", arg.name));
-                output.push_str(&format!("    OutP->{}Type.msgt_number = 1;\n", arg.name));
-                output.push_str(&format!("    OutP->{}Type.msgt_inline = TRUE;\n", arg.name));
-                output.push_str(&format!("    OutP->{}Type.msgt_longform = FALSE;\n", arg.name));
-                output.push_str(&format!("    OutP->{}Type.msgt_deallocate = FALSE;\n", arg.name));
-                output.push_str(&format!("    OutP->{}Type.msgt_unused = 0;\n", arg.name));
+        // Pack OUT and INOUT parameters from reply layout
+        if let Some(ref reply_layout) = routine.reply_layout {
+            for field in &reply_layout.fields {
+                if field.is_type_descriptor && field.name != "RetCodeType" {
+                    let base_name = field.name.strip_suffix("Type").unwrap_or(&field.name);
 
-                // Data
-                if matches!(arg.direction, Direction::Out) {
-                    output.push_str(&format!("    OutP->{} = {};\n", arg.name, arg.name));
-                } else {
-                    // INOUT: already in message, possibly modified
-                    output.push_str(&format!("    OutP->{} = In0P->{};\n", arg.name, arg.name));
+                    // Find the corresponding data field
+                    let data_field = reply_layout.fields.iter()
+                        .find(|f| f.name == base_name && !f.is_type_descriptor)
+                        .unwrap_or(field);
+
+                    let mach_const = data_field.mach_type.to_mach_constant();
+                    let bit_size = data_field.mach_type.bit_size();
+
+                    // Pack type descriptor
+                    output.push_str(&format!("    OutP->{}.msgt_name = {};\n", field.name, mach_const));
+                    output.push_str(&format!("    OutP->{}.msgt_size = {};\n", field.name, bit_size));
+
+                    // For arrays, use the count variable; for scalars, use 1
+                    if data_field.is_array {
+                        let count_name = format!("{}Cnt", base_name);
+                        output.push_str(&format!("    OutP->{}.msgt_number = {}; /* Array count */\n",
+                            field.name, count_name));
+                    } else {
+                        output.push_str(&format!("    OutP->{}.msgt_number = 1;\n", field.name));
+                    }
+
+                    output.push_str(&format!("    OutP->{}.msgt_inline = TRUE;\n", field.name));
+                    output.push_str(&format!("    OutP->{}.msgt_longform = FALSE;\n", field.name));
+                    output.push_str(&format!("    OutP->{}.msgt_deallocate = FALSE;\n", field.name));
+                    output.push_str(&format!("    OutP->{}.msgt_unused = 0;\n\n", field.name));
+
+                } else if !field.is_type_descriptor && !field.is_count_field && field.name != "RetCode" {
+                    // Pack data field (for OUT parameters, use local variable)
+                    if field.is_array {
+                        output.push_str(&format!("    OutP->{} = {}; /* TODO: handle array packing */\n",
+                            field.name, field.name));
+                    } else {
+                        output.push_str(&format!("    OutP->{} = {};\n", field.name, field.name));
+                    }
+                    output.push('\n');
                 }
-
-                output.push('\n');
             }
         }
 

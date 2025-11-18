@@ -77,6 +77,7 @@ pub enum Keyword {
     NotDealloc,
     ServerCopy,
     CountInOut,
+    Const,
 }
 
 impl Keyword {
@@ -125,6 +126,7 @@ impl Keyword {
             Keyword::NotDealloc => "NotDealloc",
             Keyword::ServerCopy => "ServerCopy",
             Keyword::CountInOut => "CountInOut",
+            Keyword::Const => "const",
         }
     }
 }

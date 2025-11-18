@@ -259,6 +259,7 @@ impl SimpleLexer {
             "notdealloc" => Some(Keyword::NotDealloc),
             "servercopy" => Some(Keyword::ServerCopy),
             "countinout" => Some(Keyword::CountInOut),
+            "const" => Some(Keyword::Const),
             _ => None,
         }
     }

@@ -45,19 +45,34 @@ impl Parser {
 
         let mut modifiers = Vec::new();
 
-        // Check for optional modifiers
-        while let Some(Token::Keyword(kw)) = self.peek() {
-            match kw {
-                Keyword::KernelUser => {
-                    modifiers.push(SubsystemMod::KernelUser);
-                    self.advance();
-                }
-                Keyword::KernelServer => {
-                    modifiers.push(SubsystemMod::KernelServer);
-                    self.advance();
-                }
-                _ => break,
+        // Skip preprocessor directives and check for optional modifiers
+        loop {
+            // Skip any preprocessor directives
+            while matches!(self.peek(), Some(Token::Preprocessor(_))) {
+                self.advance();
             }
+
+            // Check for modifiers
+            if let Some(Token::Keyword(kw)) = self.peek() {
+                match kw {
+                    Keyword::KernelUser => {
+                        modifiers.push(SubsystemMod::KernelUser);
+                        self.advance();
+                    }
+                    Keyword::KernelServer => {
+                        modifiers.push(SubsystemMod::KernelServer);
+                        self.advance();
+                    }
+                    _ => break,
+                }
+            } else {
+                break;
+            }
+        }
+
+        // Skip preprocessor directives before name
+        while matches!(self.peek(), Some(Token::Preprocessor(_))) {
+            self.advance();
         }
 
         let name = self.expect_identifier()?;
@@ -301,8 +316,36 @@ impl Parser {
         self.expect_symbol(Symbol::Colon)?;
         let arg_type = self.parse_type_spec()?;
 
-        // TODO: Parse flags (Dealloc, ServerCopy, etc.)
-        let flags = IpcFlags::default();
+        // Parse optional type qualifiers (e.g., "const", "dealloc")
+        let mut flags = IpcFlags::default();
+        while matches!(self.peek(), Some(Token::Symbol(Symbol::Comma))) {
+            self.advance(); // consume comma
+
+            // Parse qualifier keyword
+            match self.peek() {
+                Some(Token::Keyword(Keyword::Const)) => {
+                    self.advance();
+                    // Mark as const (we'll need to add this to IpcFlags)
+                }
+                Some(Token::Keyword(Keyword::Dealloc)) => {
+                    self.advance();
+                    flags.dealloc = Some(DeallocMode::Dealloc);
+                }
+                Some(Token::Keyword(Keyword::NotDealloc)) => {
+                    self.advance();
+                    flags.dealloc = Some(DeallocMode::NotDealloc);
+                }
+                Some(Token::Keyword(Keyword::ServerCopy)) => {
+                    self.advance();
+                    flags.server_copy = true;
+                }
+                Some(Token::Keyword(Keyword::CountInOut)) => {
+                    self.advance();
+                    flags.count_in_out = true;
+                }
+                _ => break, // Unknown qualifier, stop parsing qualifiers
+            }
+        }
 
         Ok(Argument {
             name,
@@ -435,9 +478,10 @@ impl Parser {
     }
 
     fn expect_identifier(&mut self) -> Result<String, ParseError> {
-        match self.advance() {
-            Some(Token::Identifier(s)) => Ok(s.clone()),
-            _ => Err(self.error("Expected identifier")),
+        let token = self.advance().cloned();
+        match token {
+            Some(Token::Identifier(s)) => Ok(s),
+            other => Err(self.error(&format!("Expected identifier, found {:?}", other))),
         }
     }
 

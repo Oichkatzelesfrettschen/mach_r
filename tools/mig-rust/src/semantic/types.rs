@@ -77,6 +77,10 @@ pub struct ResolvedType {
     pub size: TypeSize,
     /// Is this an array type?
     pub is_array: bool,
+    /// Array element type (if is_array is true)
+    pub array_element: Option<Box<ResolvedType>>,
+    /// Array size specification (if is_array is true)
+    pub array_size: Option<crate::parser::ast::ArraySize>,
     /// Is this a polymorphic type?
     pub is_polymorphic: bool,
 }
@@ -109,6 +113,12 @@ impl TypeResolver {
         self.add_primitive("unsigned", MachMsgType::TypeInteger32, "unsigned int", 4);
         self.add_primitive("unsigned32", MachMsgType::TypeInteger32, "uint32_t", 4);
         self.add_primitive("unsigned64", MachMsgType::TypeInteger64, "uint64_t", 8);
+
+        // MIG standard integer types (from std_types.defs)
+        self.add_primitive("integer_8", MachMsgType::TypeByte, "int8_t", 1);
+        self.add_primitive("integer_16", MachMsgType::TypeInteger16, "int16_t", 2);
+        self.add_primitive("integer_32", MachMsgType::TypeInteger32, "int32_t", 4);
+        self.add_primitive("integer_64", MachMsgType::TypeInteger64, "int64_t", 8);
 
         // Boolean
         self.add_primitive("boolean_t", MachMsgType::TypeBool, "boolean_t", 4);
@@ -146,6 +156,8 @@ impl TypeResolver {
             c_type: Some(c_type.to_string()),
             size: TypeSize::Fixed(size),
             is_array: false,
+            array_element: None,
+            array_size: None,
             is_polymorphic: false,
         });
     }
@@ -158,6 +170,8 @@ impl TypeResolver {
             c_type: Some(c_type.to_string()),
             size: TypeSize::Fixed(4), // Port names are 32-bit
             is_array: false,
+            array_element: None,
+            array_size: None,
             is_polymorphic: false,
         });
     }
@@ -175,32 +189,52 @@ impl TypeResolver {
 
     /// Resolve a type declaration
     fn resolve_type_decl(&mut self, decl: &TypeDecl) -> Result<(), super::SemanticError> {
-        // For now, just handle basic type aliases
-        // TODO: Handle ctype annotations, arrays, structs, etc.
+        use crate::parser::ast::{ArraySize};
 
         let resolved = match &decl.spec {
             TypeSpec::Basic(base_name) => {
                 // Look up base type
-                let base_type = self.lookup(base_name)?;
+                let base_type = self.lookup(base_name)?.clone();
                 ResolvedType {
                     name: decl.name.clone(),
                     mach_type: base_type.mach_type,
                     c_type: Some(decl.name.clone()), // Use declared name as C type
                     size: base_type.size,
                     is_array: false,
+                    array_element: None,
+                    array_size: None,
                     is_polymorphic: base_type.is_polymorphic,
                 }
             }
-            TypeSpec::Array { element, .. } => {
+            TypeSpec::Array { element, size } => {
                 // Resolve element type
                 if let TypeSpec::Basic(elem_name) = element.as_ref() {
-                    let elem_type = self.lookup(elem_name)?;
+                    let elem_type = self.lookup(elem_name)?.clone();
+
+                    // Determine actual size based on array size spec
+                    let type_size = match size {
+                        ArraySize::Fixed(n) => {
+                            // Fixed size array
+                            if let TypeSize::Fixed(elem_size) = elem_type.size {
+                                TypeSize::Fixed(elem_size * (*n as usize))
+                            } else {
+                                TypeSize::Indefinite
+                            }
+                        }
+                        ArraySize::Variable | ArraySize::VariableWithMax(_) => {
+                            // Variable size arrays are indefinite
+                            TypeSize::Indefinite
+                        }
+                    };
+
                     ResolvedType {
                         name: decl.name.clone(),
                         mach_type: elem_type.mach_type,
-                        c_type: Some(format!("{}*", elem_type.c_type.as_ref().unwrap_or(&elem_name))),
-                        size: TypeSize::Indefinite, // Arrays are variable size
+                        c_type: Some(format!("{}*", elem_type.c_type.as_ref().unwrap_or(elem_name))),
+                        size: type_size,
                         is_array: true,
+                        array_element: Some(Box::new(elem_type)),
+                        array_size: Some(*size),
                         is_polymorphic: false,
                     }
                 } else {
@@ -218,6 +252,8 @@ impl TypeResolver {
                     c_type: Some(decl.name.clone()),
                     size: TypeSize::Fixed(4),
                     is_array: false,
+                    array_element: None,
+                    array_size: None,
                     is_polymorphic: false,
                 }
             }

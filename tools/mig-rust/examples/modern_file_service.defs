@@ -1,0 +1,129 @@
+/*
+ * Modern Cross-Platform File Service
+ *
+ * This demonstrates modern .defs design with:
+ * - Explicit, portable types
+ * - Async-friendly patterns
+ * - Structured errors
+ * - Zero-copy optimization
+ */
+
+subsystem modern_file 5000;
+
+/* ========================================================================
+ * Type Definitions - All Portable
+ * ======================================================================== */
+
+/* Explicit-size integers (never use 'int' or 'long') */
+type file_handle_t = uint64_t;
+type file_size_t = uint64_t;
+type file_offset_t = uint64_t;
+type timestamp_t = uint64_t;  /* Unix timestamp in nanoseconds */
+
+/* Error handling */
+type error_code_t = int32_t;
+
+/* Strings are always UTF-8 byte arrays */
+type path_t = array[*:4096] of uint8_t;
+
+/* Byte buffers */
+type buffer_t = array[*:1048576] of uint8_t;  /* 1MB max inline */
+
+/* ========================================================================
+ * File Operations
+ * ======================================================================== */
+
+/*
+ * Open a file
+ *
+ * Flags:
+ *   0x01 = Read
+ *   0x02 = Write
+ *   0x04 = Create
+ *   0x08 = Truncate
+ */
+routine file_open(
+        server_port  : mach_port_t;
+    in  path         : path_t;
+    in  flags        : uint32_t;
+    out handle       : file_handle_t;
+    out error        : error_code_t
+);
+
+/*
+ * Read from file
+ *
+ * Returns actual bytes read in `count`.
+ * Returns error_code_t (0 = success, negative = error).
+ */
+routine file_read(
+        server_port  : mach_port_t;
+    in  handle       : file_handle_t;
+    in  offset       : file_offset_t;
+    in  max_bytes    : uint32_t;
+    out data         : buffer_t;
+    out count        : uint32_t;
+    out error        : error_code_t
+);
+
+/*
+ * Write to file
+ *
+ * Returns actual bytes written in `count`.
+ */
+routine file_write(
+        server_port  : mach_port_t;
+    in  handle       : file_handle_t;
+    in  offset       : file_offset_t;
+    in  data         : buffer_t;
+    out count        : uint32_t;
+    out error        : error_code_t
+);
+
+/*
+ * Get file size
+ */
+routine file_size(
+        server_port  : mach_port_t;
+    in  handle       : file_handle_t;
+    out size         : file_size_t;
+    out error        : error_code_t
+);
+
+/*
+ * Close file (no reply needed)
+ */
+simpleroutine file_close(
+        server_port  : mach_port_t;
+    in  handle       : file_handle_t
+);
+
+/* ========================================================================
+ * Async Operations (for large files)
+ * ======================================================================== */
+
+/*
+ * Start async read operation
+ * Returns operation_id to poll for completion
+ */
+routine file_read_async(
+        server_port    : mach_port_t;
+    in  handle         : file_handle_t;
+    in  offset         : file_offset_t;
+    in  max_bytes      : uint32_t;
+    out operation_id   : uint64_t;
+    out error          : error_code_t
+);
+
+/*
+ * Poll async operation
+ * complete: 0 = pending, 1 = done, 2 = error
+ */
+routine file_poll_async(
+        server_port    : mach_port_t;
+    in  operation_id   : uint64_t;
+    out complete       : uint32_t;
+    out data           : buffer_t;
+    out count          : uint32_t;
+    out error          : error_code_t
+);

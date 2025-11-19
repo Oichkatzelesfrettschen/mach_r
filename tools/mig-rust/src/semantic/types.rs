@@ -110,9 +110,13 @@ impl TypeResolver {
         self.add_primitive("int32", MachMsgType::TypeInteger32, "int32_t", 4);
         self.add_primitive("int32_t", MachMsgType::TypeInteger32, "int32_t", 4);
         self.add_primitive("int64", MachMsgType::TypeInteger64, "int64_t", 8);
+        self.add_primitive("int64_t", MachMsgType::TypeInteger64, "int64_t", 8);
         self.add_primitive("unsigned", MachMsgType::TypeInteger32, "unsigned int", 4);
         self.add_primitive("unsigned32", MachMsgType::TypeInteger32, "uint32_t", 4);
+        self.add_primitive("uint32_t", MachMsgType::TypeInteger32, "uint32_t", 4);
         self.add_primitive("unsigned64", MachMsgType::TypeInteger64, "uint64_t", 8);
+        self.add_primitive("uint64_t", MachMsgType::TypeInteger64, "uint64_t", 8);
+        self.add_primitive("uint8_t", MachMsgType::TypeByte, "uint8_t", 1);
 
         // MIG standard integer types (from std_types.defs)
         self.add_primitive("integer_8", MachMsgType::TypeByte, "int8_t", 1);

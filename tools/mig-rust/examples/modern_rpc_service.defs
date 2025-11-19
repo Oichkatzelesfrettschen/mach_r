@@ -1,0 +1,144 @@
+/*
+ * Modern Cross-Platform RPC Service
+ *
+ * This demonstrates:
+ * - Request/response patterns
+ * - Structured errors
+ * - Service discovery
+ * - Versioning
+ */
+
+subsystem modern_rpc 6000;
+
+/* ========================================================================
+ * Type Definitions
+ * ======================================================================== */
+
+/* Request tracking */
+type request_id_t = uint64_t;
+
+/* Service names */
+type service_name_t = array[*:256] of uint8_t;
+
+/* RPC payload */
+type rpc_payload_t = array[*:65536] of uint8_t;  /* 64KB max */
+
+/* Error structure */
+type error_category_t = uint32_t;
+type error_message_t = array[*:512] of uint8_t;
+
+/* ========================================================================
+ * Service Management
+ * ======================================================================== */
+
+/*
+ * Get service version
+ */
+routine rpc_get_version(
+        server_port  : mach_port_t;
+    out major        : uint32_t;
+    out minor        : uint32_t;
+    out patch        : uint32_t
+);
+
+/*
+ * List available services
+ */
+routine rpc_list_services(
+        server_port  : mach_port_t;
+    out services     : array[*:100] of service_name_t;
+    out count        : uint32_t;
+    out error        : int32_t
+);
+
+/* ========================================================================
+ * Synchronous RPC
+ * ======================================================================== */
+
+/*
+ * Call service synchronously (blocks until complete)
+ *
+ * Returns:
+ *   error == 0: success, response contains result
+ *   error < 0: RPC error, check error_category and error_message
+ */
+routine rpc_call_sync(
+        server_port      : mach_port_t;
+    in  service          : service_name_t;
+    in  request          : rpc_payload_t;
+    out response         : rpc_payload_t;
+    out error            : int32_t;
+    out error_category   : error_category_t;
+    out error_message    : error_message_t
+);
+
+/* ========================================================================
+ * Asynchronous RPC
+ * ======================================================================== */
+
+/*
+ * Submit async RPC request (returns immediately)
+ *
+ * Returns request_id to poll for completion.
+ */
+routine rpc_call_async(
+        server_port  : mach_port_t;
+    in  service      : service_name_t;
+    in  request      : rpc_payload_t;
+    out request_id   : request_id_t;
+    out error        : int32_t
+);
+
+/*
+ * Poll async RPC result
+ *
+ * status values:
+ *   0 = pending (still processing)
+ *   1 = complete (response available)
+ *   2 = error (check error fields)
+ *   3 = cancelled
+ */
+routine rpc_poll(
+        server_port      : mach_port_t;
+    in  request_id       : request_id_t;
+    out status           : uint32_t;
+    out response         : rpc_payload_t;
+    out error            : int32_t;
+    out error_category   : error_category_t;
+    out error_message    : error_message_t
+);
+
+/*
+ * Cancel pending RPC (no reply)
+ */
+simpleroutine rpc_cancel(
+        server_port  : mach_port_t;
+    in  request_id   : request_id_t
+);
+
+/* ========================================================================
+ * Batch Operations
+ * ======================================================================== */
+
+/*
+ * Submit multiple requests in one call
+ */
+routine rpc_batch_submit(
+        server_port  : mach_port_t;
+    in  services     : array[*:10] of service_name_t;
+    in  requests     : array[*:10] of rpc_payload_t;
+    in  count        : uint32_t;
+    out request_ids  : array[*:10] of request_id_t;
+    out error        : int32_t
+);
+
+/*
+ * Poll multiple requests
+ */
+routine rpc_batch_poll(
+        server_port  : mach_port_t;
+    in  request_ids  : array[*:10] of request_id_t;
+    in  count        : uint32_t;
+    out statuses     : array[*:10] of uint32_t;
+    out error        : int32_t
+);

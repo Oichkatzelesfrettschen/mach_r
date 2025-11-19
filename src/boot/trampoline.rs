@@ -1,6 +1,8 @@
 //! ARM64 assembly trampoline for kernel entry
 //! Pure Rust implementation with inline assembly
 
+#![cfg(target_arch = "aarch64")]
+
 use super::{BootInfo, paging::KERNEL_VIRTUAL_BASE};
 
 /// Kernel entry point signature

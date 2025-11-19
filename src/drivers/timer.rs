@@ -1,6 +1,8 @@
 //! ARM Generic Timer driver implementation
 //! Pure Rust driver for ARMv8 Generic Timer
 
+#![cfg(target_arch = "aarch64")]
+
 use super::{Driver, DriverError, PollStatus, DeviceDriver, DeviceInfo};
 use alloc::boxed::Box;
 use core::arch::asm;
@@ -65,52 +67,52 @@ impl ArmV8TimerDriver {
     
     /// Enable physical timer
     pub fn enable_physical_timer(&self) {
-        let ctl: u32 = 1; // Enable bit
+        let ctl: u64 = 1; // Enable bit
         unsafe {
-            asm!("msr cntps_ctl_el1, {0:w}", in(reg) ctl);
+            asm!("msr cntps_ctl_el1, {}", in(reg) ctl);
         }
     }
-    
+
     /// Disable physical timer
     pub fn disable_physical_timer(&self) {
-        let ctl: u32 = 0;
+        let ctl: u64 = 0;
         unsafe {
-            asm!("msr cntps_ctl_el1, {0:w}", in(reg) ctl);
+            asm!("msr cntps_ctl_el1, {}", in(reg) ctl);
         }
     }
-    
+
     /// Enable virtual timer
     pub fn enable_virtual_timer(&self) {
-        let ctl: u32 = 1; // Enable bit
+        let ctl: u64 = 1; // Enable bit
         unsafe {
-            asm!("msr cntv_ctl_el0, {0:w}", in(reg) ctl);
+            asm!("msr cntv_ctl_el0, {}", in(reg) ctl);
         }
     }
-    
+
     /// Disable virtual timer
     pub fn disable_virtual_timer(&self) {
-        let ctl: u32 = 0;
+        let ctl: u64 = 0;
         unsafe {
-            asm!("msr cntv_ctl_el0, {0:w}", in(reg) ctl);
+            asm!("msr cntv_ctl_el0, {}", in(reg) ctl);
         }
     }
-    
+
     /// Read physical timer control
     pub fn read_physical_control(&self) -> u32 {
-        let mut ctl: u32;
+        let mut ctl: u64;
         unsafe {
-            asm!("mrs {0:w}, cntps_ctl_el1", out(reg) ctl);
+            asm!("mrs {}, cntps_ctl_el1", out(reg) ctl);
         }
-        ctl
+        ctl as u32
     }
-    
+
     /// Read virtual timer control
     pub fn read_virtual_control(&self) -> u32 {
-        let mut ctl: u32;
+        let mut ctl: u64;
         unsafe {
-            asm!("mrs {0:w}, cntv_ctl_el0", out(reg) ctl);
+            asm!("mrs {}, cntv_ctl_el0", out(reg) ctl);
         }
-        ctl
+        ctl as u32
     }
     
     /// Convert counter ticks to microseconds

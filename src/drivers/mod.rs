@@ -229,6 +229,7 @@ pub fn init_enhanced_device_manager() -> Result<(), DriverError> {
         if let Ok(uart_driver) = create_uart_driver() {
             manager.register_driver(uart_driver)?;
         }
+        #[cfg(target_arch = "aarch64")]
         if let Ok(timer_driver) = create_timer_driver() {
             manager.register_driver(timer_driver)?;
         }
@@ -247,6 +248,7 @@ fn create_uart_driver() -> Result<Box<dyn DeviceDriver>, DriverError> {
 }
 
 /// Create timer driver instance
+#[cfg(target_arch = "aarch64")]
 fn create_timer_driver() -> Result<Box<dyn DeviceDriver>, DriverError> {
     Ok(Box::new(timer::ArmV8TimerDriver::new()))
 }
@@ -266,6 +268,7 @@ pub fn init() {
     
     // Initialize new pure Rust drivers
     let _ = uart::init();
+    #[cfg(target_arch = "aarch64")]
     let _ = timer::init();
     let _ = interrupt::init();
     

@@ -516,10 +516,52 @@ impl RustStubGenerator {
         if self.async_api {
             output.push_str(&format!("    /// {} (asynchronous)\n", routine.name));
             output.push_str(&format!("    pub async fn {}_async(\n", routine.name));
-            output.push_str("        port: &AsyncPort,\n");
-            output.push_str("    ) -> Result<(), IpcError> {\n");
-            output.push_str("        // TODO: Async implementation\n");
-            output.push_str("        unimplemented!()\n");
+
+            // Add parameters
+            output.push_str("        port: PortName,\n");
+            for (param_name, param_type) in &params {
+                output.push_str(&format!("        {}: {},\n", param_name, param_type));
+            }
+
+            // Return type
+            output.push_str("    ) -> Result<");
+            if routine.is_simple {
+                output.push_str("(), IpcError> {\n");
+            } else {
+                if returns.is_empty() {
+                    output.push_str("(), IpcError> {\n");
+                } else if returns.len() == 1 {
+                    output.push_str(&format!("{}, IpcError> {{\n", returns[0].1));
+                } else {
+                    let return_types: Vec<String> = returns.iter().map(|(_, ty)| ty.clone()).collect();
+                    output.push_str(&format!("({}), IpcError> {{\n", return_types.join(", ")));
+                }
+            }
+
+            // Implementation: use spawn_blocking to run sync version
+            output.push_str("        // Convert slice parameters to owned for async\n");
+            for (param_name, param_type) in &params {
+                if param_type.starts_with("&[") {
+                    output.push_str(&format!("        let {}_owned = {}.to_vec();\n", param_name, param_name));
+                }
+            }
+            output.push_str("\n        // Run synchronous IPC in blocking thread pool\n");
+            output.push_str("        tokio::task::spawn_blocking(move || {\n");
+            output.push_str("            ");
+            output.push_str(&routine.name);
+            output.push_str("(port");
+            for (param_name, param_type) in &params {
+                output.push_str(", ");
+                if param_type.starts_with("&[") {
+                    output.push_str(&format!("&{}_owned", param_name));
+                } else {
+                    output.push_str(param_name);
+                }
+            }
+            output.push_str(")\n");
+            output.push_str("        })\n");
+            output.push_str("        .await\n");
+            output.push_str("        .map_err(|e| IpcError::Internal(format!(\"Task join error: {}\", e)))?\n");
             output.push_str("    }\n\n");
         }
 

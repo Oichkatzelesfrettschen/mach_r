@@ -9,6 +9,9 @@ pub mod uart;
 pub mod timer;
 pub mod interrupt;
 
+#[cfg(target_arch = "x86_64")]
+pub mod vga;
+
 use alloc::vec::Vec;
 use alloc::boxed::Box;
 use spin::Mutex;
@@ -242,18 +245,36 @@ pub fn init_enhanced_device_manager() -> Result<(), DriverError> {
 }
 
 /// Create UART driver instance
+#[cfg(target_arch = "aarch64")]
 fn create_uart_driver() -> Result<Box<dyn DeviceDriver>, DriverError> {
     Ok(Box::new(uart::Pl011Driver::new()))
 }
 
+#[cfg(not(target_arch = "aarch64"))]
+fn create_uart_driver() -> Result<Box<dyn DeviceDriver>, DriverError> {
+    Err(DriverError::NotSupported)
+}
+
 /// Create timer driver instance
+#[cfg(target_arch = "aarch64")]
 fn create_timer_driver() -> Result<Box<dyn DeviceDriver>, DriverError> {
     Ok(Box::new(timer::ArmV8TimerDriver::new()))
 }
 
+#[cfg(not(target_arch = "aarch64"))]
+fn create_timer_driver() -> Result<Box<dyn DeviceDriver>, DriverError> {
+    Err(DriverError::NotSupported)
+}
+
 /// Create interrupt controller driver instance
+#[cfg(target_arch = "aarch64")]
 fn create_interrupt_driver() -> Result<Box<dyn DeviceDriver>, DriverError> {
     Ok(Box::new(interrupt::Gic400Driver::new()))
+}
+
+#[cfg(not(target_arch = "aarch64"))]
+fn create_interrupt_driver() -> Result<Box<dyn DeviceDriver>, DriverError> {
+    Err(DriverError::NotSupported)
 }
 
 /// Initialize driver subsystem

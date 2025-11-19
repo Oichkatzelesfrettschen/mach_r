@@ -4,7 +4,6 @@
 //! of Mach's core concepts including ports, messages, tasks, and threads.
 
 #![no_std]
-#![cfg_attr(not(test), no_main)]
 // #![feature(alloc_error_handler)] // Only on nightly
 
 // Standard library replacement for no_std

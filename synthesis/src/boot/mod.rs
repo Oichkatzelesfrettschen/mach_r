@@ -7,7 +7,11 @@ pub mod uefi;
 pub mod multiboot;
 pub mod memory_map;
 pub mod device_tree;
+
+#[cfg(target_arch = "aarch64")]
 pub mod paging;
+
+#[cfg(target_arch = "aarch64")]
 pub mod trampoline;
 
 // Architecture-specific modules
@@ -684,25 +688,26 @@ jump_to_kernel_asm:
     "#
 );
 
-// x86_64 assembly stubs - minimal implementation
-#[cfg(target_arch = "x86_64")]
-global_asm!(
-    r#"
-.text
-.global _start
-_start:
-    /* Simple x86_64 entry */
-    mov rsp, 0x90000
-    call efi_main
-1:  hlt
-    jmp 1b
-
-.global setup_x86_64_paging
-setup_x86_64_paging:
-    ret
-    
-.global jump_to_kernel_asm
-jump_to_kernel_asm:
-    ret
-    "#
-);
+// x86_64 assembly stubs - NOTE: _start is now in arch::x86_64::boot
+// This global_asm is commented out to avoid duplicate symbols
+// #[cfg(target_arch = "x86_64")]
+// global_asm!(
+//     r#"
+// .text
+// .global _start
+// _start:
+//     /* Simple x86_64 entry */
+//     mov rsp, 0x90000
+//     call efi_main
+// 1:  hlt
+//     jmp 1b
+//
+// .global setup_x86_64_paging
+// setup_x86_64_paging:
+//     ret
+//
+// .global jump_to_kernel_asm
+// jump_to_kernel_asm:
+//     ret
+//     "#
+// );

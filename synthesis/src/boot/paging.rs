@@ -1,6 +1,7 @@
 //! ARM64 page table setup for Mach_R bootloader
 //! Pure Rust implementation of AArch64 MMU page table management
 
+#![cfg(target_arch = "aarch64")]
 
 /// ARM64 page sizes
 pub const PAGE_SIZE: usize = 4096;

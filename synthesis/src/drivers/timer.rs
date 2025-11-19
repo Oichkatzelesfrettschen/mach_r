@@ -1,17 +1,20 @@
-//! ARM Generic Timer driver implementation
-//! Pure Rust driver for ARMv8 Generic Timer
+//! Timer driver implementation
 
 use super::{Driver, DriverError, PollStatus, DeviceDriver, DeviceInfo};
 use alloc::boxed::Box;
+
+#[cfg(target_arch = "aarch64")]
 use core::arch::asm;
 
 /// ARMv8 Generic Timer driver
+#[cfg(target_arch = "aarch64")]
 pub struct ArmV8TimerDriver {
     initialized: bool,
     frequency: u64,
     last_tick: u64,
 }
 
+#[cfg(target_arch = "aarch64")]
 impl ArmV8TimerDriver {
     /// Create new ARMv8 timer driver
     pub fn new() -> Self {
@@ -181,6 +184,7 @@ impl ArmV8TimerDriver {
     }
 }
 
+#[cfg(target_arch = "aarch64")]
 impl Driver for ArmV8TimerDriver {
     fn name(&self) -> &str {
         "armv8-timer"
@@ -300,6 +304,7 @@ impl Driver for ArmV8TimerDriver {
     }
 }
 
+#[cfg(target_arch = "aarch64")]
 impl DeviceDriver for ArmV8TimerDriver {
     fn name(&self) -> &str {
         "armv8-timer"
@@ -405,22 +410,34 @@ fn format_number(s: &mut heapless::String<16>, n: usize) -> Result<(), ()> {
 }
 
 /// Initialize ARMv8 timer driver
+#[cfg(target_arch = "aarch64")]
 pub fn init() -> Result<(), DriverError> {
     let mut timer = ArmV8TimerDriver::new();
     Driver::init(&mut timer)?;
-    
+
     // Register with device manager if available
     if let Some(manager) = crate::drivers::device_manager_mut() {
         let _ = manager.register_driver(Box::new(timer));
     }
-    
+
+    Ok(())
+}
+
+#[cfg(not(target_arch = "aarch64"))]
+pub fn init() -> Result<(), DriverError> {
+    // No timer driver on non-ARM platforms yet
     Ok(())
 }
 
 /// Global timer instance
+#[cfg(target_arch = "aarch64")]
 static mut SYSTEM_TIMER: Option<ArmV8TimerDriver> = None;
 
+#[cfg(not(target_arch = "aarch64"))]
+static mut SYSTEM_TIMER: Option<()> = None;
+
 /// Initialize system timer
+#[cfg(target_arch = "aarch64")]
 pub fn init_system_timer() -> Result<(), DriverError> {
     unsafe {
         let mut timer = ArmV8TimerDriver::new();
@@ -430,7 +447,13 @@ pub fn init_system_timer() -> Result<(), DriverError> {
     Ok(())
 }
 
+#[cfg(not(target_arch = "aarch64"))]
+pub fn init_system_timer() -> Result<(), DriverError> {
+    Ok(())
+}
+
 /// Get current system time in microseconds
+#[cfg(target_arch = "aarch64")]
 pub fn system_time_us() -> u64 {
     unsafe {
         if let Some(ref timer) = SYSTEM_TIMER {
@@ -441,7 +464,13 @@ pub fn system_time_us() -> u64 {
     }
 }
 
+#[cfg(not(target_arch = "aarch64"))]
+pub fn system_time_us() -> u64 {
+    0
+}
+
 /// Delay for specified microseconds
+#[cfg(target_arch = "aarch64")]
 pub fn delay_us(us: u64) {
     unsafe {
         if let Some(ref timer) = SYSTEM_TIMER {
@@ -452,6 +481,14 @@ pub fn delay_us(us: u64) {
                 core::hint::spin_loop();
             }
         }
+    }
+}
+
+#[cfg(not(target_arch = "aarch64"))]
+pub fn delay_us(us: u64) {
+    // Fallback busy wait
+    for _ in 0..(us * 100) {
+        core::hint::spin_loop();
     }
 }
 

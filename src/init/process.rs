@@ -268,7 +268,7 @@ impl CommandParser {
     /// Parse command line with environment variable expansion
     pub fn parse_with_env(
         command_line: &str,
-        env: &FnvIndexMap<String<32>, String<128>, 32>
+        _env: &FnvIndexMap<String<32>, String<128>, 32>
     ) -> Result<(String<256>, Vec<String<128>, 16>), &'static str> {
         // TODO: Implement environment variable expansion
         // For now, just parse normally

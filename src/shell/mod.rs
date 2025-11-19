@@ -228,5 +228,5 @@ pub fn init() -> Result<(), &'static str> {
 
 /// Get the global shell instance
 pub fn get_shell() -> Option<&'static mut Shell> {
-    unsafe { SHELL.as_mut() }
+    unsafe { (*core::ptr::addr_of_mut!(SHELL)).as_mut() }
 }

@@ -585,11 +585,11 @@ impl BootProtocol for UefiProtocol {
     fn allocate_kernel_memory(&mut self, size: u64) -> Result<u64, BootError> {
         // TODO: Allocate memory using UEFI boot services
         // This would call boot_services.allocate_pages
-        let pages = (size + 4095) / 4096; // Round up to page boundary
+        let _pages = (size + 4095) / 4096; // Round up to page boundary
         Ok(0x80000) // Return default kernel load address
     }
-    
-    fn load_kernel(&mut self, kernel_data: &[u8], load_addr: u64) -> Result<(), BootError> {
+
+    fn load_kernel(&mut self, _kernel_data: &[u8], _load_addr: u64) -> Result<(), BootError> {
         // TODO: Copy kernel to memory and validate ELF format
         // For now, assume kernel is already loaded
         Ok(())

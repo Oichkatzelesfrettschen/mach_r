@@ -9,6 +9,7 @@ rustflags = [
     "-C", "link-arg=-nostartfiles",
     "-C", "link-arg=--nmagic",
     "-C", "relocation-model=static",
+    "-D", "warnings",
 ]
 
 [target.aarch64-unknown-none]

@@ -369,7 +369,7 @@ pub mod vm_interface {
     }
     
     /// Unmarshal VM allocate reply
-    fn unmarshal_vm_allocate_reply(msg: &Message) -> Result<VmAllocateReply, MigError> {
+    fn unmarshal_vm_allocate_reply(_msg: &Message) -> Result<VmAllocateReply, MigError> {
         // In real implementation, would properly deserialize
         // For now, return dummy
         Ok(VmAllocateReply {

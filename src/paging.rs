@@ -291,12 +291,10 @@ impl ActivePageTable {
             if let Some(p2) = p3.next_table_mut(virt.p3_index()) {
                 if let Some(p1) = p2.next_table_mut(virt.p2_index()) {
                     p1[virt.p1_index()].set_unused();
-                    
+
                     // Flush TLB
-                    unsafe {
-                        // In real implementation:
-                        // asm!("invlpg [{}]", in(reg) virt.0);
-                    }
+                    // In real implementation:
+                    // unsafe { asm!("invlpg [{}]", in(reg) virt.0); }
                 }
             }
         }
@@ -430,7 +428,7 @@ pub fn init_page_table() {
 /// Get the active page table
 pub fn active_page_table() -> ActivePageTable {
     let page_table_lock = ACTIVE_PAGE_TABLE.lock();
-    if let Some(ref table) = *page_table_lock {
+    if let Some(ref _table) = *page_table_lock {
         // Create a new instance for now
         let p4_table = Box::new(PageTable::new());
         ActivePageTable::new(p4_table)

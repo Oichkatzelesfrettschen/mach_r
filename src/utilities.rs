@@ -24,8 +24,8 @@ impl Utilities {
     /// List directory contents (ls command)
     pub fn list_directory(&self, path: &str) -> Result<(), &'static str> {
         crate::println!("$ ls {}", path);
-        
-        let file_server = file_server::file_server();
+
+        let _file_server = file_server::file_server();
         
         // For now, we'll use the built-in file system entries
         // In a full implementation, this would query the file server
@@ -126,7 +126,7 @@ impl Utilities {
         crate::println!(" 10  shell");
         
         // In a full implementation, this would query the task manager
-        let task_manager = crate::task::manager();
+        let _task_manager = crate::task::manager();
         crate::println!("\nSystem status:");
         crate::println!("  Active tasks: Multiple");
         crate::println!("  Available memory: Page-based allocation");

@@ -98,7 +98,7 @@ pub fn dispatch<T: NameService>(svc: &T, msg: &Message) -> Option<Message> {
             let nlen = u32::from_le_bytes(lb) as usize;
             if data.len() < off + nlen + 8 { return None; }
             let name = core::str::from_utf8(&data[off..off+nlen]).ok()?; off+=nlen;
-            let mut pb=[0u8;8]; pb.copy_from_slice(&data[off..off+8]); off+=8;
+            let mut pb=[0u8;8]; pb.copy_from_slice(&data[off..off+8]); let _ = off + 8;
             let port = PortId(u64::from_le_bytes(pb));
             let rc = svc.register(name, port);
             let mut out = alloc::vec::Vec::new();
@@ -111,7 +111,7 @@ pub fn dispatch<T: NameService>(svc: &T, msg: &Message) -> Option<Message> {
             let mut lb=[0u8;4]; lb.copy_from_slice(&data[off..off+4]); off+=4;
             let nlen = u32::from_le_bytes(lb) as usize;
             if data.len() < off + nlen { return None; }
-            let name = core::str::from_utf8(&data[off..off+nlen]).ok()?; off+=nlen;
+            let name = core::str::from_utf8(&data[off..off+nlen]).ok()?; let _ = off + nlen;
             match svc.lookup(name) {
                 Ok(pid) => {
                     let mut out = alloc::vec::Vec::new();
@@ -131,7 +131,7 @@ pub fn dispatch<T: NameService>(svc: &T, msg: &Message) -> Option<Message> {
             let mut lb=[0u8;4]; lb.copy_from_slice(&data[off..off+4]); off+=4;
             let nlen = u32::from_le_bytes(lb) as usize;
             if data.len() < off + nlen { return None; }
-            let name = core::str::from_utf8(&data[off..off+nlen]).ok()?; off+=nlen;
+            let name = core::str::from_utf8(&data[off..off+nlen]).ok()?; let _ = off + nlen;
             let rc = svc.unregister(name);
             let mut out = alloc::vec::Vec::new();
             out.extend_from_slice(&(rc as i32).to_le_bytes());

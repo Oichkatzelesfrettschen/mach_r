@@ -348,11 +348,9 @@ pub unsafe fn disable_interrupts() {
 /// Check if interrupts are enabled
 pub fn interrupts_enabled() -> bool {
     let flags: u64;
-    unsafe {
-        // In real implementation:
-        // asm!("pushfq; pop {}", out(reg) flags);
-        flags = 0x200; // IF flag set
-    }
+    // In real implementation:
+    // unsafe { asm!("pushfq; pop {}", out(reg) flags); }
+    flags = 0x200; // IF flag set
     (flags & 0x200) != 0
 }
 

@@ -12,9 +12,9 @@ pub fn init() -> Result<(), &'static str> {
 /// ps - List processes
 pub fn ps(args: &[&str]) -> Result<CommandResult, &'static str> {
     let (flags, _params) = parse_args(args)?;
-    let show_all = has_flag(&flags, "-a") || has_flag(&flags, "a");
+    let _show_all = has_flag(&flags, "-a") || has_flag(&flags, "a");
     let show_users = has_flag(&flags, "-u") || has_flag(&flags, "u");
-    let show_extra = has_flag(&flags, "-x") || has_flag(&flags, "x");
+    let _show_extra = has_flag(&flags, "-x") || has_flag(&flags, "x");
     
     let mut result = CommandResult::success();
     

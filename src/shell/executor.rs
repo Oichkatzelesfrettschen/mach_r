@@ -67,7 +67,7 @@ fn find_program_in_path(shell: &Shell, program: &str) -> Option<String<512>> {
 // Mock implementations of common external programs
 
 /// Mock ls command
-fn execute_ls(_shell: &mut Shell, command: &Command) -> Result<ExecResult, &'static str> {
+fn execute_ls(_shell: &mut Shell, _command: &Command) -> Result<ExecResult, &'static str> {
     // TODO: List directory contents
     // For now, just return success
     Ok(ExecResult { exit_code: 0, command_found: true })
@@ -102,19 +102,19 @@ fn execute_grep(_shell: &mut Shell, command: &Command) -> Result<ExecResult, &'s
 }
 
 /// Mock wc command
-fn execute_wc(_shell: &mut Shell, command: &Command) -> Result<ExecResult, &'static str> {
+fn execute_wc(_shell: &mut Shell, _command: &Command) -> Result<ExecResult, &'static str> {
     // TODO: Count lines, words, characters
     Ok(ExecResult { exit_code: 0, command_found: true })
 }
 
 /// Mock head command
-fn execute_head(_shell: &mut Shell, command: &Command) -> Result<ExecResult, &'static str> {
+fn execute_head(_shell: &mut Shell, _command: &Command) -> Result<ExecResult, &'static str> {
     // TODO: Show first N lines of files
     Ok(ExecResult { exit_code: 0, command_found: true })
 }
 
 /// Mock tail command
-fn execute_tail(_shell: &mut Shell, command: &Command) -> Result<ExecResult, &'static str> {
+fn execute_tail(_shell: &mut Shell, _command: &Command) -> Result<ExecResult, &'static str> {
     // TODO: Show last N lines of files
     Ok(ExecResult { exit_code: 0, command_found: true })
 }

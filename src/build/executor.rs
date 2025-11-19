@@ -251,7 +251,7 @@ fn get_timestamp_ms() -> u64 {
 
 /// Clean build artifacts for a target
 pub fn clean_target(build_system: &BuildSystem, target_index: usize) -> Result<(), &'static str> {
-    let target = &build_system.targets[target_index];
+    let _target = &build_system.targets[target_index];
     
     // TODO: Remove target output file
     // For now, just return success

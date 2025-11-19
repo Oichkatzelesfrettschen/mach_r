@@ -246,7 +246,7 @@ impl ExternalPager {
     }
     
     /// Parse a page reply message
-    fn parse_page_reply(&self, msg: Message) -> Result<PhysicalAddress, PagerError> {
+    fn parse_page_reply(&self, _msg: Message) -> Result<PhysicalAddress, PagerError> {
         // In real implementation, would extract physical address from message
         // For now, return a dummy address
         Ok(PhysicalAddress::new(0x10000))
@@ -365,8 +365,8 @@ impl VmMapEntry {
         
         // Calculate offset into memory object
         let region_offset = addr.0 - self.start.0;
-        let object_offset = self.offset + region_offset;
-        
+        let _object_offset = self.offset + region_offset;
+
         // Request page from memory object's pager
         // In real implementation, would go through the pager
         Ok(PhysicalAddress::new(0x30000))

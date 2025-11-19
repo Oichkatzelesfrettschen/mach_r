@@ -328,5 +328,5 @@ pub fn init() -> Result<(), &'static str> {
 
 /// Get the global build system
 pub fn get_build_system() -> Option<&'static mut BuildSystem> {
-    unsafe { BUILD_SYSTEM.as_mut() }
+    unsafe { (*core::ptr::addr_of_mut!(BUILD_SYSTEM)).as_mut() }
 }

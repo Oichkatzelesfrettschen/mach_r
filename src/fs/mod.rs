@@ -99,5 +99,5 @@ pub fn init() -> Result<(), &'static str> {
 
 /// Get the global filesystem manager
 pub fn get_manager() -> Option<&'static mut FilesystemManager> {
-    unsafe { FS_MANAGER.as_mut() }
+    unsafe { (*core::ptr::addr_of_mut!(FS_MANAGER)).as_mut() }
 }

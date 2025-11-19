@@ -218,7 +218,7 @@ impl NameServer {
         };
         
         // Get the port to register from payload after the name
-        let mut port_id = PortId(0);
+        let port_id;
         let port_pos = req_size + req.name_len as usize;
         if data.len() >= port_pos + core::mem::size_of::<u64>() {
             let mut buf = [0u8; 8];
@@ -415,13 +415,13 @@ pub fn name_server() -> &'static NameServer {
 
 /// Process messages for the Name Server (called by scheduler)
 pub fn process_messages() {
-    let ns = name_server();
-    
+    let _ns = name_server();
+
     // In a real implementation, this would:
     // 1. Check for incoming messages on the server port
     // 2. Process each message
     // 3. Send replies
-    // 
+    //
     // For now, this is a placeholder that would be called by the scheduler
 }
 

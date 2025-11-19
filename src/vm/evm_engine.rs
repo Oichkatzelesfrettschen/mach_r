@@ -244,7 +244,7 @@ pub fn init() -> Result<(), &'static str> {
 /// Execute EVM bytecode
 pub fn execute(code: &[u8], data: &[u8]) -> Result<VmResult, &'static str> {
     unsafe {
-        match EVM_ENGINE.as_mut() {
+        match (*core::ptr::addr_of_mut!(EVM_ENGINE)).as_mut() {
             Some(engine) => engine.execute_bytecode(code, data),
             None => Err("EVM engine not initialized"),
         }
@@ -253,5 +253,5 @@ pub fn execute(code: &[u8], data: &[u8]) -> Result<VmResult, &'static str> {
 
 /// Get the global EVM engine
 pub fn get_engine() -> Option<&'static mut EvmEngine> {
-    unsafe { EVM_ENGINE.as_mut() }
+    unsafe { (*core::ptr::addr_of_mut!(EVM_ENGINE)).as_mut() }
 }

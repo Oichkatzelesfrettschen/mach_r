@@ -241,7 +241,7 @@ pub fn boot_kernel(config: BootloaderConfig) -> ! {
             boot_time: 0, // TODO: Get actual time
         });
         
-        let boot_info = BOOT_INFO_STORAGE.as_ref().unwrap();
+        let boot_info = unsafe { (*core::ptr::addr_of!(BOOT_INFO_STORAGE)).as_ref().unwrap() };
         
         serial_println("Jumping to kernel...");
         
@@ -470,7 +470,7 @@ fn setup_page_tables_x86_64(memory_map: &[MemoryMapEntry], kernel_load_addr: u64
     static mut PML4: PageTable = PageTable::new();
     
     unsafe {
-        let pml4 = &mut PML4;
+        let pml4 = &mut *core::ptr::addr_of_mut!(PML4);
         let mut mem_manager = X86_64MemoryManager::new(pml4);
         
         // Identity map first 4GB for bootloader

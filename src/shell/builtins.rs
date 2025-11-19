@@ -59,14 +59,14 @@ fn builtin_cd(shell: &mut Shell, command: &Command) -> Result<ExecResult, &'stat
 }
 
 /// Built-in: pwd - Print working directory
-fn builtin_pwd(shell: &mut Shell, _command: &Command) -> Result<ExecResult, &'static str> {
+fn builtin_pwd(_shell: &mut Shell, _command: &Command) -> Result<ExecResult, &'static str> {
     // TODO: Print to stdout
     // For now, just return success
     Ok(ExecResult { exit_code: 0, command_found: true })
 }
 
 /// Built-in: echo - Print arguments
-fn builtin_echo(shell: &mut Shell, command: &Command) -> Result<ExecResult, &'static str> {
+fn builtin_echo(_shell: &mut Shell, command: &Command) -> Result<ExecResult, &'static str> {
     // TODO: Print arguments to stdout with proper formatting
     // Handle -n flag (no newline), -e flag (escape sequences)
     
@@ -163,14 +163,14 @@ fn builtin_unset(shell: &mut Shell, command: &Command) -> Result<ExecResult, &'s
 }
 
 /// Built-in: env - Print environment
-fn builtin_env(shell: &mut Shell, _command: &Command) -> Result<ExecResult, &'static str> {
+fn builtin_env(_shell: &mut Shell, _command: &Command) -> Result<ExecResult, &'static str> {
     // TODO: Print all environment variables
     // Format: NAME=value
     Ok(ExecResult { exit_code: 0, command_found: true })
 }
 
 /// Built-in: history - Show command history
-fn builtin_history(shell: &mut Shell, _command: &Command) -> Result<ExecResult, &'static str> {
+fn builtin_history(_shell: &mut Shell, _command: &Command) -> Result<ExecResult, &'static str> {
     // TODO: Print command history with line numbers
     Ok(ExecResult { exit_code: 0, command_found: true })
 }
@@ -183,7 +183,7 @@ fn builtin_help(_shell: &mut Shell, command: &Command) -> Result<ExecResult, &'s
     } else {
         // Show help for specific command
         let cmd_name = &command.args[0];
-        if let Some(builtin) = BUILTINS.iter().find(|b| b.name == cmd_name.as_str()) {
+        if let Some(_builtin) = BUILTINS.iter().find(|b| b.name == cmd_name.as_str()) {
             // TODO: Print detailed help for this built-in
         } else {
             // TODO: Print "command not found" or general help

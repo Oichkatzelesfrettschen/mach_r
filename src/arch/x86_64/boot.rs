@@ -301,7 +301,7 @@ global_asm!(
 /// - magic: Multiboot2 magic number (should be 0x36d76289)
 /// - multiboot_info: Physical address of Multiboot2 information structure
 #[no_mangle]
-pub extern "C" fn kmain(magic: u64, multiboot_info: u64) -> ! {
+pub extern "C" fn kmain(_magic: u64, _multiboot_info: u64) -> ! {
     // Clear screen
     let vga_buffer = 0xB8000 as *mut u8;
     unsafe {

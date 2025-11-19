@@ -140,7 +140,7 @@ impl UserRuntime {
     /// Change current directory
     pub fn change_directory(&mut self, path: &str) -> Result<(), &'static str> {
         // Validate directory exists through file server
-        let file_server = file_server::file_server();
+        let _file_server = file_server::file_server();
         
         // In full implementation, would check if path is a directory
         self.process.current_dir = path.to_string();
@@ -425,7 +425,7 @@ impl ApplicationLoader {
     }
 
     /// Run system monitor application
-    fn run_monitor_app(&self, runtime: &mut UserRuntime, _args: &[&str]) -> Result<i32, &'static str> {
+    fn run_monitor_app(&self, _runtime: &mut UserRuntime, _args: &[&str]) -> Result<i32, &'static str> {
         crate::println!("=== Mach_R System Monitor ===");
         
         // Show system information

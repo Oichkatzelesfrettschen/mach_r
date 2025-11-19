@@ -1,8 +1,7 @@
 //! x86_64 specific bootloader components for Mach_R
 //! Pure Rust implementation for x86_64 architecture
 
-use super::{BootInfo, MemoryMapEntry, FramebufferInfo};
-use core::arch::asm;
+use super::BootInfo;
 
 /// x86_64 page table entry flags
 pub const PAGE_PRESENT: u64 = 1 << 0;
@@ -411,7 +410,7 @@ pub fn init_x86_64() -> Result<(), &'static str> {
     // Set up basic GDT
     static mut GDT: segments::Gdt = segments::Gdt::new();
     unsafe {
-        segments::load_gdt(&GDT);
+        segments::load_gdt(&*core::ptr::addr_of!(GDT));
     }
     
     Ok(())

@@ -106,7 +106,7 @@ impl FatFilesystem {
     }
     
     /// Open a file (placeholder implementation)
-    pub fn open_file(&mut self, path: &str) -> Result<usize, &'static str> {
+    pub fn open_file(&mut self, _path: &str) -> Result<usize, &'static str> {
         if !self.initialized {
             return Err("FAT filesystem not initialized");
         }
@@ -164,5 +164,5 @@ pub fn init() -> Result<(), &'static str> {
 
 /// Get the global FAT filesystem
 pub fn get_fat_fs() -> Option<&'static mut FatFilesystem> {
-    unsafe { FAT_FS.as_mut() }
+    unsafe { (*core::ptr::addr_of_mut!(FAT_FS)).as_mut() }
 }

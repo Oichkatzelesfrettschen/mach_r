@@ -1,0 +1,155 @@
+# Mach_R Build Container - Docker Compose Configuration
+# Optimized for ARM Mac → x86_64 cross-compilation
+#
+# Usage:
+#   docker-compose -f docker-compose.build.yml build
+#   docker-compose -f docker-compose.build.yml run builder
+
+version: '3.8'
+
+services:
+  # Main build service
+  builder:
+    build:
+      context: .
+      dockerfile: Dockerfile.build
+      # Force x86_64 platform for compatibility
+      platform: linux/amd64
+      # Use BuildKit for faster builds
+      cache_from:
+        - mach_r_builder:latest
+    image: mach_r_builder:latest
+    container_name: mach_r_builder
+
+    # Mount source code and preserve build artifacts
+    volumes:
+      # Source code (read-write)
+      - .:/workspace:cached
+
+      # Cargo registry cache (persist between builds)
+      - cargo_registry:/root/.cargo/registry
+
+      # Cargo git cache (persist between builds)
+      - cargo_git:/root/.cargo/git
+
+      # Build output (fast I/O for target directory)
+      - build_target:/workspace/target
+
+      # Build distribution artifacts
+      - ./build/dist:/workspace/build/dist:rw
+
+    # Environment variables
+    environment:
+      # Build configuration
+      - RUSTFLAGS=-C linker=x86_64-linux-gnu-gcc -C link-arg=-nostartfiles
+      - CARGO_BUILD_JOBS=4
+      - RUST_BACKTRACE=1
+
+      # Target configuration
+      - CARGO_TARGET_DIR=/workspace/target
+      - CARGO_HOME=/root/.cargo
+
+      # Development aids
+      - TERM=xterm-256color
+      - COLORTERM=truecolor
+
+    # Working directory
+    working_dir: /workspace
+
+    # Keep container running for interactive development
+    stdin_open: true
+    tty: true
+
+    # Resource limits (adjust for your Mac)
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 8G
+        reservations:
+          cpus: '2.0'
+          memory: 4G
+
+    # Default command (can be overridden)
+    command: /bin/bash
+
+  # Quick build service (no interactive shell)
+  quick-build:
+    extends: builder
+    container_name: mach_r_quick_build
+    stdin_open: false
+    tty: false
+    command: cargo build --lib --target x86_64-unknown-none
+
+  # Test runner service
+  test:
+    extends: builder
+    container_name: mach_r_test
+    command: cargo test --lib
+
+  # QEMU test service (run built kernel)
+  qemu:
+    extends: builder
+    container_name: mach_r_qemu
+    # Add QEMU GUI support (requires X11 forwarding on Mac)
+    environment:
+      - DISPLAY=${DISPLAY}
+      - RUSTFLAGS=-C linker=x86_64-linux-gnu-gcc -C link-arg=-nostartfiles
+    # Expose QEMU monitor port
+    ports:
+      - "5555:5555"  # QEMU monitor
+      - "1234:1234"  # GDB debugging
+    command: >
+      bash -c "
+        echo 'Building kernel...' &&
+        cargo build --release --target x86_64-unknown-none &&
+        echo 'Launching QEMU...' &&
+        qemu-system-x86_64
+          -kernel target/x86_64-unknown-none/release/mach_r
+          -serial stdio
+          -monitor tcp:0.0.0.0:5555,server,nowait
+          -s
+          -S
+      "
+
+  # Development shell with all tools
+  dev:
+    extends: builder
+    container_name: mach_r_dev
+    volumes:
+      # Add SSH keys for git operations
+      - ~/.ssh:/root/.ssh:ro
+      # Add git config
+      - ~/.gitconfig:/root/.gitconfig:ro
+    command: /bin/bash
+
+# Named volumes for persistent caching
+volumes:
+  # Cargo registry cache (Rust dependencies)
+  cargo_registry:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${HOME}/.docker/mach_r/cargo/registry
+
+  # Cargo git cache
+  cargo_git:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${HOME}/.docker/mach_r/cargo/git
+
+  # Build artifacts (target directory)
+  build_target:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${HOME}/.docker/mach_r/target
+
+# Networks (optional - for future multi-container setups)
+networks:
+  default:
+    name: mach_r_build_network

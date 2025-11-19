@@ -255,23 +255,22 @@ impl RustStubGenerator {
                 // Type descriptor initialization
                 let base_name = field.name.strip_suffix("Type").unwrap_or(&field.name);
 
-                // Determine the appropriate type descriptor based on field type
-                if field.name.contains("port") || field.name == "server_portType" {
-                    output.push_str(&format!("                {}: MachMsgType::port_copy_send(),\n", field.name));
-                } else {
-                    // For data fields, look at the actual data field to determine type
-                    let data_field = routine.request_layout.fields.iter()
-                        .find(|f| f.name == base_name);
+                // Look at the actual data field to determine type
+                let data_field = routine.request_layout.fields.iter()
+                    .find(|f| f.name == base_name);
 
-                    if let Some(df) = data_field {
-                        if df.c_type.contains("int64") {
-                            output.push_str(&format!("                {}: MachMsgType::integer_64(1),\n", field.name));
-                        } else {
-                            output.push_str(&format!("                {}: MachMsgType::integer_32(1),\n", field.name));
-                        }
+                if let Some(df) = data_field {
+                    // Check if it's a port type by examining the c_type
+                    if df.c_type.contains("mach_port") || df.c_type == "PortName" {
+                        output.push_str(&format!("                {}: MachMsgType::port_copy_send(),\n", field.name));
+                    } else if df.c_type.contains("int64") {
+                        output.push_str(&format!("                {}: MachMsgType::integer_64(1),\n", field.name));
                     } else {
                         output.push_str(&format!("                {}: MachMsgType::integer_32(1),\n", field.name));
                     }
+                } else {
+                    // Fallback: default to integer_32
+                    output.push_str(&format!("                {}: MachMsgType::integer_32(1),\n", field.name));
                 }
             } else if field.is_count_field {
                 // Count field - set to array length

@@ -189,8 +189,13 @@ pub extern "C" fn kmain(magic: u64, multiboot_info: u64) -> ! {
         for entry in mmap {
             region_count += 1;
 
-            if entry.mem_type == 1 {
-                total_available += entry.length;
+            // Copy packed field values to avoid E0793 unaligned reference errors
+            let entry_base = entry.base_addr;
+            let entry_length = entry.length;
+            let entry_type = entry.mem_type;
+
+            if entry_type == 1 {
+                total_available += entry_length;
             }
 
             // Show first few entries on VGA
@@ -198,8 +203,8 @@ pub extern "C" fn kmain(magic: u64, multiboot_info: u64) -> ! {
                 crate::vga_println!(
                     "  [{:2}] 0x{:016x} - 0x{:016x} ({})",
                     region_count,
-                    entry.base_addr,
-                    entry.base_addr + entry.length - 1,
+                    entry_base,
+                    entry_base + entry_length - 1,
                     entry.type_name()
                 );
             }
@@ -208,9 +213,9 @@ pub extern "C" fn kmain(magic: u64, multiboot_info: u64) -> ! {
             crate::serial_println!(
                 "Mach_R:   Region {}: 0x{:016x} - 0x{:016x} ({} bytes) - {}",
                 region_count,
-                entry.base_addr,
-                entry.base_addr + entry.length - 1,
-                entry.length,
+                entry_base,
+                entry_base + entry_length - 1,
+                entry_length,
                 entry.type_name()
             );
         }
@@ -229,15 +234,22 @@ pub extern "C" fn kmain(magic: u64, multiboot_info: u64) -> ! {
     if let Some(fb) = mb2_info.framebuffer() {
         crate::vga_println!("");
         crate::vga_println!("Framebuffer:");
-        crate::vga_println!("  Address:    0x{:016x}", fb.framebuffer_addr);
-        crate::vga_println!("  Resolution: {}x{}", fb.framebuffer_width, fb.framebuffer_height);
-        crate::vga_println!("  Pitch:      {} bytes", fb.framebuffer_pitch);
-        crate::vga_println!("  BPP:        {}", fb.framebuffer_bpp);
+
+        // Copy packed field values to avoid E0793 unaligned reference errors
+        let fb_addr = fb.framebuffer_addr;
+        let fb_width = fb.framebuffer_width;
+        let fb_height = fb.framebuffer_height;
+        let fb_pitch = fb.framebuffer_pitch;
+        let fb_bpp = fb.framebuffer_bpp;
+
+        crate::vga_println!("  Address:    0x{:016x}", fb_addr);
+        crate::vga_println!("  Resolution: {}x{}", fb_width, fb_height);
+        crate::vga_println!("  Pitch:      {} bytes", fb_pitch);
+        crate::vga_println!("  BPP:        {}", fb_bpp);
         crate::vga_println!("  Type:       {}", fb.type_name());
 
-        crate::serial_println!("Mach_R: Framebuffer at 0x{:016x}", fb.framebuffer_addr);
-        crate::serial_println!("Mach_R:   {}x{} @ {} bpp",
-            fb.framebuffer_width, fb.framebuffer_height, fb.framebuffer_bpp);
+        crate::serial_println!("Mach_R: Framebuffer at 0x{:016x}", fb_addr);
+        crate::serial_println!("Mach_R:   {}x{} @ {} bpp", fb_width, fb_height, fb_bpp);
     }
 
     // Display load base address if present
@@ -256,20 +268,24 @@ pub extern "C" fn kmain(magic: u64, multiboot_info: u64) -> ! {
     for tag in mb2_info.tags() {
         tag_count += 1;
 
-        if let Some(tag_type) = TagType::from_u32(tag.tag_type) {
+        // Copy packed field values to avoid E0793 unaligned reference errors
+        let tag_type_val = tag.tag_type;
+        let tag_size_val = tag.size;
+
+        if let Some(tag_type) = TagType::from_u32(tag_type_val) {
             if tag_count <= 8 {
                 crate::vga_println!("  [{}] {} ({} bytes)",
-                    tag_count, tag_type.name(), tag.size);
+                    tag_count, tag_type.name(), tag_size_val);
             }
             crate::serial_println!("Mach_R:   Tag {}: {} (type={}, size={})",
-                tag_count, tag_type.name(), tag.tag_type, tag.size);
+                tag_count, tag_type.name(), tag_type_val, tag_size_val);
         } else {
             if tag_count <= 8 {
                 crate::vga_println!("  [{}] Unknown (type={}, {} bytes)",
-                    tag_count, tag.tag_type, tag.size);
+                    tag_count, tag_type_val, tag_size_val);
             }
             crate::serial_println!("Mach_R:   Tag {}: Unknown (type={}, size={})",
-                tag_count, tag.tag_type, tag.size);
+                tag_count, tag_type_val, tag_size_val);
         }
     }
 

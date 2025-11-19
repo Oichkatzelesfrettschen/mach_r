@@ -121,8 +121,11 @@ pub struct StringTag {
 impl StringTag {
     pub fn string(&self) -> &str {
         unsafe {
+            // Copy packed field value to avoid E0793 unaligned reference error
+            let tag_size = self.tag.size;
+
             let start = (self as *const Self as *const u8).add(8);
-            let len = self.tag.size as usize - 8 - 1; // -8 for header, -1 for null terminator
+            let len = tag_size as usize - 8 - 1; // -8 for header, -1 for null terminator
             let bytes = slice::from_raw_parts(start, len);
             str::from_utf8_unchecked(bytes)
         }
@@ -149,7 +152,9 @@ pub struct MmapEntry {
 
 impl MmapEntry {
     pub fn type_name(&self) -> &'static str {
-        match self.mem_type {
+        // Copy packed field value to avoid E0793 unaligned reference error
+        let mem_type = self.mem_type;
+        match mem_type {
             1 => "Available",
             2 => "Reserved",
             3 => "ACPI Reclaimable",
@@ -172,12 +177,16 @@ pub struct MmapTag {
 impl MmapTag {
     pub fn entries(&self) -> MmapIter {
         unsafe {
+            // Copy packed field values to avoid E0793 unaligned reference errors
+            let tag_size = self.tag.size;
+            let entry_size = self.entry_size;
+
             let start = (self as *const Self as *const u8).add(16);
-            let count = (self.tag.size as usize - 16) / self.entry_size as usize;
+            let count = (tag_size as usize - 16) / entry_size as usize;
             MmapIter {
                 current: start as *const MmapEntry,
                 remaining: count,
-                entry_size: self.entry_size as usize,
+                entry_size: entry_size as usize,
             }
         }
     }
@@ -219,8 +228,11 @@ pub struct ModuleTag {
 impl ModuleTag {
     pub fn name(&self) -> &str {
         unsafe {
+            // Copy packed field value to avoid E0793 unaligned reference error
+            let tag_size = self.tag.size;
+
             let start = (self as *const Self as *const u8).add(16);
-            let len = self.tag.size as usize - 16 - 1; // -16 for header, -1 for null
+            let len = tag_size as usize - 16 - 1; // -16 for header, -1 for null
             let bytes = slice::from_raw_parts(start, len);
             str::from_utf8_unchecked(bytes)
         }
@@ -243,11 +255,16 @@ pub struct FramebufferTag {
 
 impl FramebufferTag {
     pub fn size_bytes(&self) -> u64 {
-        self.framebuffer_pitch as u64 * self.framebuffer_height as u64
+        // Copy packed field values to avoid E0793 unaligned reference errors
+        let pitch = self.framebuffer_pitch;
+        let height = self.framebuffer_height;
+        pitch as u64 * height as u64
     }
 
     pub fn type_name(&self) -> &'static str {
-        match self.framebuffer_type {
+        // Copy packed field value to avoid E0793 unaligned reference error
+        let fb_type = self.framebuffer_type;
+        match fb_type {
             0 => "Indexed",
             1 => "RGB",
             2 => "EGA Text",
@@ -300,7 +317,9 @@ impl Multiboot2InfoParser {
     pub fn total_size(&self) -> u32 {
         unsafe {
             let info = self.info_addr as *const Multiboot2Info;
-            (*info).total_size
+            // Copy packed field value to avoid E0793 unaligned reference error
+            let size = (*info).total_size;
+            size
         }
     }
 
@@ -320,7 +339,7 @@ impl Multiboot2InfoParser {
     pub fn find_tag(&self, tag_type: TagType) -> Option<*const Multiboot2Tag> {
         for tag in self.tags() {
             if tag.tag_type == tag_type as u32 {
-                return Some(tag as *const Multiboot2Tag);
+                return Some(&tag as *const Multiboot2Tag);
             }
         }
         None
@@ -346,7 +365,10 @@ impl Multiboot2InfoParser {
     pub fn basic_memory_info(&self) -> Option<(u32, u32)> {
         self.find_tag(TagType::BasicMemInfo).map(|tag| unsafe {
             let mem_tag = tag as *const BasicMemInfoTag;
-            ((*mem_tag).mem_lower, (*mem_tag).mem_upper)
+            // Copy packed field values to avoid E0793 unaligned reference errors
+            let lower = (*mem_tag).mem_lower;
+            let upper = (*mem_tag).mem_upper;
+            (lower, upper)
         })
     }
 
@@ -354,7 +376,9 @@ impl Multiboot2InfoParser {
     pub fn memory_map(&self) -> Option<MmapIter> {
         self.find_tag(TagType::Mmap).map(|tag| unsafe {
             let mmap_tag = tag as *const MmapTag;
-            (*mmap_tag).entries()
+            // Access packed struct to get iterator (deref happens in entries() call)
+            let iter = (*mmap_tag).entries();
+            iter
         })
     }
 
@@ -376,7 +400,9 @@ impl Multiboot2InfoParser {
     pub fn load_base_addr(&self) -> Option<u32> {
         self.find_tag(TagType::LoadBaseAddr).map(|tag| unsafe {
             let addr_tag = tag as *const LoadBaseAddrTag;
-            (*addr_tag).load_base_addr
+            // Copy packed field value to avoid E0793 unaligned reference error
+            let addr = (*addr_tag).load_base_addr;
+            addr
         })
     }
 }
@@ -399,13 +425,17 @@ impl Iterator for TagIter {
             let tag_ptr = self.current as *const Multiboot2Tag;
             let tag = *tag_ptr;
 
+            // Copy packed field values to avoid E0793 unaligned reference errors
+            let tag_type = tag.tag_type;
+            let tag_size = tag.size;
+
             // Check for end tag
-            if tag.tag_type == TagType::End as u32 {
+            if tag_type == TagType::End as u32 {
                 return None;
             }
 
             // Move to next tag (8-byte aligned)
-            let size = (tag.size + 7) & !7;
+            let size = (tag_size + 7) & !7;
             self.current += size as u64;
 
             Some(tag)

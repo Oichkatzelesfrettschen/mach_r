@@ -93,6 +93,8 @@ impl RustStubGenerator {
         output.push_str("    MACH_MSG_TYPE_COPY_SEND, MACH_MSG_TYPE_MAKE_SEND_ONCE,\n");
         output.push_str("    MACH_MSG_TYPE_INTEGER_32, MACH_MSG_TYPE_INTEGER_64,\n");
         output.push_str("    MACH_PORT_NULL, KERN_SUCCESS,\n");
+        output.push_str("    MACH_MSG_TIMEOUT_NONE,\n");
+        output.push_str("    send_msg, recv_msg, send_recv_msg,\n");
         output.push_str("};\n\n");
 
         if self.async_api {
@@ -240,18 +242,72 @@ impl RustStubGenerator {
             }
         }
 
+        // Initialize message structure
         output.push_str("            let mut msg = Self {\n");
         output.push_str("                header: MachMsgHeader::new(\n");
         output.push_str(&format!("                    {}_ID,\n", routine.name.to_uppercase()));
-        output.push_str("                    0,  // size computed below\n");
+        output.push_str(&format!("                    size_of::<Self>() as u32,\n"));
         output.push_str("                ),\n");
 
-        // Initialize fields
-        output.push_str("                // TODO: Initialize fields\n");
+        // Initialize all fields
+        for field in &routine.request_layout.fields {
+            if field.is_type_descriptor {
+                // Type descriptor initialization
+                let base_name = field.name.strip_suffix("Type").unwrap_or(&field.name);
+
+                // Determine the appropriate type descriptor based on field type
+                if field.name.contains("port") || field.name == "server_portType" {
+                    output.push_str(&format!("                {}: MachMsgType::port_copy_send(),\n", field.name));
+                } else {
+                    // For data fields, look at the actual data field to determine type
+                    let data_field = routine.request_layout.fields.iter()
+                        .find(|f| f.name == base_name);
+
+                    if let Some(df) = data_field {
+                        if df.c_type.contains("int64") {
+                            output.push_str(&format!("                {}: MachMsgType::integer_64(1),\n", field.name));
+                        } else {
+                            output.push_str(&format!("                {}: MachMsgType::integer_32(1),\n", field.name));
+                        }
+                    } else {
+                        output.push_str(&format!("                {}: MachMsgType::integer_32(1),\n", field.name));
+                    }
+                }
+            } else if field.is_count_field {
+                // Count field - set to array length
+                let array_name = field.name.strip_suffix("Cnt").unwrap_or(&field.name);
+                output.push_str(&format!("                {}: {}.len() as u32,\n", field.name, array_name));
+            } else if field.is_array {
+                // Array field - initialize based on type
+                if let Some(max) = field.max_array_elements {
+                    // Fixed-size array - copy data
+                    output.push_str(&format!("                {}: {{\n", field.name));
+                    output.push_str(&format!("                    let mut arr = [Default::default(); {}];\n", max));
+                    output.push_str(&format!("                    arr[..{}.len()].copy_from_slice({});\n", field.name, field.name));
+                    output.push_str("                    arr\n");
+                    output.push_str("                },\n");
+                } else {
+                    // Pointer - just store the pointer
+                    output.push_str(&format!("                {}: {}.as_ptr(),\n", field.name, field.name));
+                }
+            } else {
+                // Regular field - just copy the value
+                output.push_str(&format!("                {}: {},\n", field.name, field.name));
+            }
+        }
 
         output.push_str("            };\n\n");
 
-        output.push_str("            Ok(msg)\n");
+        // Update type descriptor counts for arrays
+        for field in &routine.request_layout.fields {
+            if field.is_array {
+                let type_field_name = format!("{}Type", field.name);
+                output.push_str(&format!("            msg.{}.msgt_number = {}.len() as u32;\n",
+                    type_field_name, field.name));
+            }
+        }
+
+        output.push_str("\n            Ok(msg)\n");
         output.push_str("        }\n");
         output.push_str("    }\n\n");
 
@@ -312,9 +368,50 @@ impl RustStubGenerator {
 
         // Parameters
         output.push_str("        port: PortName,\n");
+
+        // Collect parameters and return values
+        let mut params = Vec::new();
+        let mut returns = Vec::new();
+
         for arg in &routine.routine.args {
-            if matches!(arg.direction, Direction::In | Direction::InOut) {
-                output.push_str(&format!("        {}: /* TODO */,\n", arg.name));
+            let is_array = routine.request_layout.fields.iter()
+                .any(|f| f.name == arg.name && f.is_array);
+
+            match arg.direction {
+                Direction::In | Direction::InOut | Direction::RequestPort => {
+                    let param_type = if is_array {
+                        let field = routine.request_layout.fields.iter()
+                            .find(|f| f.name == arg.name && f.is_array)
+                            .unwrap();
+                        let elem_type = field.c_type.trim_end_matches('*').trim();
+                        let rust_type = c_type_to_rust(elem_type);
+                        format!("&[{}]", rust_type)
+                    } else {
+                        let field = routine.request_layout.fields.iter()
+                            .find(|f| f.name == arg.name && !f.is_type_descriptor && !f.is_count_field);
+
+                        if let Some(f) = field {
+                            c_type_to_rust(&f.c_type)
+                        } else {
+                            "i32".to_string() // Default fallback
+                        }
+                    };
+
+                    params.push((arg.name.clone(), param_type.clone()));
+                    output.push_str(&format!("        {}: {},\n", arg.name, param_type));
+                }
+                Direction::Out => {
+                    if let Some(reply_layout) = &routine.reply_layout {
+                        let field = reply_layout.fields.iter()
+                            .find(|f| f.name == arg.name && !f.is_type_descriptor && !f.is_count_field);
+
+                        if let Some(f) = field {
+                            let rust_type = c_type_to_rust(&f.c_type);
+                            returns.push((arg.name.clone(), rust_type));
+                        }
+                    }
+                }
+                _ => {}
             }
         }
 
@@ -324,11 +421,96 @@ impl RustStubGenerator {
         if routine.is_simple {
             output.push_str("(), IpcError> {\n");
         } else {
-            output.push_str("(/* TODO: return types */), IpcError> {\n");
+            if returns.is_empty() {
+                output.push_str("(), IpcError> {\n");
+            } else if returns.len() == 1 {
+                output.push_str(&format!("{}, IpcError> {{\n", returns[0].1));
+            } else {
+                let return_types: Vec<String> = returns.iter().map(|(_, ty)| ty.clone()).collect();
+                output.push_str(&format!("({}), IpcError> {{\n", return_types.join(", ")));
+            }
         }
 
-        output.push_str("        // TODO: Implementation\n");
-        output.push_str("        unimplemented!()\n");
+        // Implementation
+        let request_struct = format!("{}Request", to_camel_case(&routine.name));
+
+        output.push_str("        // Create request message\n");
+        output.push_str(&format!("        let mut request = {}::new(", request_struct));
+
+        // Pass constructor arguments
+        let param_names: Vec<String> = params.iter().map(|(name, _)| name.clone()).collect();
+        output.push_str(&param_names.join(", "));
+        output.push_str(")?;\n\n");
+
+        if routine.is_simple {
+            // Simple routine - send only, no reply
+            output.push_str("        // Set destination port\n");
+            output.push_str("        request.header = request.header\n");
+            output.push_str("            .with_remote_port(port, MACH_MSG_TYPE_COPY_SEND as u32)\n");
+            output.push_str("            .with_bits(MACH_MSGH_BITS(\n");
+            output.push_str("                MACH_MSG_TYPE_COPY_SEND as u32,\n");
+            output.push_str("                0,\n");
+            output.push_str("            ));\n\n");
+
+            output.push_str("        // Send message\n");
+            output.push_str("        unsafe {\n");
+            output.push_str("            send_msg(\n");
+            output.push_str("                &mut request.header as *mut _,\n");
+            output.push_str("                size_of::<");
+            output.push_str(&request_struct);
+            output.push_str(">() as u32,\n");
+            output.push_str("                MACH_MSG_TIMEOUT_NONE,\n");
+            output.push_str("            )\n");
+            output.push_str("        }\n");
+        } else {
+            // Normal routine - send and receive reply
+            let reply_struct = format!("{}Reply", to_camel_case(&routine.name));
+
+            output.push_str("        // Allocate reply buffer\n");
+            output.push_str(&format!("        let mut reply: {} = unsafe {{ std::mem::zeroed() }};\n\n", reply_struct));
+
+            output.push_str("        // Set destination and reply ports\n");
+            output.push_str("        request.header = request.header\n");
+            output.push_str("            .with_remote_port(port, MACH_MSG_TYPE_COPY_SEND as u32)\n");
+            output.push_str("            .with_bits(MACH_MSGH_BITS(\n");
+            output.push_str("                MACH_MSG_TYPE_COPY_SEND as u32,\n");
+            output.push_str("                MACH_MSG_TYPE_MAKE_SEND_ONCE as u32,\n");
+            output.push_str("            ));\n\n");
+
+            output.push_str("        // Send request and receive reply\n");
+            output.push_str("        unsafe {\n");
+            output.push_str("            send_recv_msg(\n");
+            output.push_str("                &mut request.header as *mut _,\n");
+            output.push_str("                size_of::<");
+            output.push_str(&request_struct);
+            output.push_str(">() as u32,\n");
+            output.push_str("                size_of::<");
+            output.push_str(&reply_struct);
+            output.push_str(">() as u32,\n");
+            output.push_str("                MACH_PORT_NULL,\n");
+            output.push_str("                MACH_MSG_TIMEOUT_NONE,\n");
+            output.push_str("            )?;\n");
+            output.push_str("        }\n\n");
+
+            output.push_str("        // Check return code\n");
+            output.push_str("        reply.RetCode.to_result()?;\n\n");
+
+            // Extract return values
+            if !returns.is_empty() {
+                output.push_str("        // Extract return values\n");
+                if returns.len() == 1 {
+                    output.push_str(&format!("        Ok(reply.{})\n", returns[0].0));
+                } else {
+                    let return_exprs: Vec<String> = returns.iter()
+                        .map(|(name, _)| format!("reply.{}", name))
+                        .collect();
+                    output.push_str(&format!("        Ok(({}))\n", return_exprs.join(", ")));
+                }
+            } else {
+                output.push_str("        Ok(())\n");
+            }
+        }
+
         output.push_str("    }\n\n");
 
         // Async version

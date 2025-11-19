@@ -6,13 +6,13 @@ use mig_rust::codegen::rust_stubs::RustStubGenerator;
 #[test]
 fn test_simple_rust_generation() {
     // Parse simple.defs
-    let input = include_str!("../../tests/simple.defs");
+    let input = include_str!("simple.defs");
 
     let mut lexer = SimpleLexer::new(input.to_string());
     let tokens = lexer.tokenize().expect("tokenize failed");
 
     let mut parser = Parser::new(tokens);
-    let subsystem = parser.parse_subsystem().expect("parse failed");
+    let subsystem = parser.parse().expect("parse failed");
 
     // Semantic analysis
     let mut analyzer = SemanticAnalyzer::new();
@@ -33,13 +33,13 @@ fn test_simple_rust_generation() {
 
 #[test]
 fn test_array_rust_generation() {
-    let input = include_str!("../../tests/array.defs");
+    let input = include_str!("array.defs");
 
     let mut lexer = SimpleLexer::new(input.to_string());
     let tokens = lexer.tokenize().expect("tokenize failed");
 
     let mut parser = Parser::new(tokens);
-    let subsystem = parser.parse_subsystem().expect("parse failed");
+    let subsystem = parser.parse().expect("parse failed");
 
     let mut analyzer = SemanticAnalyzer::new();
     let analyzed = analyzer.analyze(&subsystem).expect("analysis failed");
@@ -48,7 +48,7 @@ fn test_array_rust_generation() {
     let rust_code = generator.generate(&analyzed).expect("codegen failed");
 
     // Should contain array types
-    assert!(rust_code.contains("[]"));  // Array syntax
+    assert!(rust_code.contains("&[") || rust_code.contains("data: ["));  // Array syntax
     assert!(rust_code.contains("ArrayTooLarge"));  // Error handling
 
     println!("Generated Rust code with arrays:\n{}", rust_code);
@@ -56,13 +56,13 @@ fn test_array_rust_generation() {
 
 #[test]
 fn test_async_rust_generation() {
-    let input = include_str!("../../tests/simple.defs");
+    let input = include_str!("simple.defs");
 
     let mut lexer = SimpleLexer::new(input.to_string());
     let tokens = lexer.tokenize().expect("tokenize failed");
 
     let mut parser = Parser::new(tokens);
-    let subsystem = parser.parse_subsystem().expect("parse failed");
+    let subsystem = parser.parse().expect("parse failed");
 
     let mut analyzer = SemanticAnalyzer::new();
     let analyzed = analyzer.analyze(&subsystem).expect("analysis failed");
@@ -80,13 +80,13 @@ fn test_async_rust_generation() {
 
 #[test]
 fn test_server_trait_generation() {
-    let input = include_str!("../../tests/simple.defs");
+    let input = include_str!("simple.defs");
 
     let mut lexer = SimpleLexer::new(input.to_string());
     let tokens = lexer.tokenize().expect("tokenize failed");
 
     let mut parser = Parser::new(tokens);
-    let subsystem = parser.parse_subsystem().expect("parse failed");
+    let subsystem = parser.parse().expect("parse failed");
 
     let mut analyzer = SemanticAnalyzer::new();
     let analyzed = analyzer.analyze(&subsystem).expect("analysis failed");

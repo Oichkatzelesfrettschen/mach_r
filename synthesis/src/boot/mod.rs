@@ -5,6 +5,7 @@ use core::arch::global_asm;
 
 pub mod uefi;
 pub mod multiboot;
+pub mod multiboot2;  // Multiboot2 info structure parser
 pub mod memory_map;
 pub mod device_tree;
 

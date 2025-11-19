@@ -5,7 +5,9 @@
 //! - !defined(SEQNOS)
 //! - !defined(MACH_IPC_DEBUG) || MACH_IPC_DEBUG
 
-use super::symbols::{SymbolTable, SymbolValue};
+use super::symbols::SymbolTable;
+#[cfg(test)]
+use super::symbols::SymbolValue;
 
 /// Preprocessor expression
 #[derive(Debug, Clone, PartialEq, Eq)]

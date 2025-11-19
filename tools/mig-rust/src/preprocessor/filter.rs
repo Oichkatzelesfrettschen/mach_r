@@ -35,7 +35,7 @@ struct ConditionalBlock {
     /// State of this block
     state: BlockState,
     /// Line number where block started
-    line: usize,
+    _line: usize,
 }
 
 /// Filters tokens based on preprocessor directives
@@ -166,7 +166,7 @@ impl PreprocessorFilter {
 
         self.block_stack.push(ConditionalBlock {
             state,
-            line: self.line_number,
+            _line: self.line_number,
         });
 
         Ok(())

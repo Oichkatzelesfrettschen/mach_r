@@ -4,13 +4,13 @@ use super::{CodeGenerator, CodegenError};
 use crate::parser::ast::*;
 
 pub struct RustCodeGenerator {
-    module_name: String,
+    _module_name: String,
 }
 
 impl RustCodeGenerator {
     pub fn new() -> Self {
         Self {
-            module_name: "mach_ipc".to_string(),
+            _module_name: "mach_ipc".to_string(),
         }
     }
 }

@@ -2,13 +2,12 @@ use clap::Parser;
 use std::path::PathBuf;
 use std::fs;
 
-use mig_rust::{SimpleLexer, Subsystem, SemanticAnalyzer, AnalyzedSubsystem};
+use mig_rust::{SimpleLexer, SemanticAnalyzer, AnalyzedSubsystem};
 use mig_rust::{PreprocessorConfig, PreprocessorFilter};
 use mig_rust::parser::Parser as MigParser;
-use mig_rust::codegen::c_generator::CCodeGenerator;
 use mig_rust::codegen::c_user_stubs::CUserStubGenerator;
 use mig_rust::codegen::c_server_stubs::CServerStubGenerator;
-use mig_rust::codegen::CodeGenerator;
+use mig_rust::codegen::c_header;
 
 #[derive(Parser)]
 #[command(name = "mig-rust")]
@@ -132,10 +131,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         fs::create_dir_all(&cli.output)?;
 
         // Generate C code
-        let c_gen = CCodeGenerator::new();
-
         if cli.header || generate_all {
-            generate_c_header(&subsystem, &c_gen, &cli.output, cli.verbose)?;
+            generate_c_headers(&analyzed, &cli.output, cli.verbose)?;
         }
 
         if cli.user || generate_all {
@@ -156,22 +153,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn generate_c_header(
-    subsystem: &Subsystem,
-    generator: &CCodeGenerator,
+fn generate_c_headers(
+    analyzed: &AnalyzedSubsystem,
     output_dir: &PathBuf,
     verbose: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     if verbose {
-        println!("  Generating C header...");
+        println!("  Generating C headers...");
     }
 
-    let header = generator.generate_user_header(subsystem)?;
-    let header_path = output_dir.join(format!("{}.h", subsystem.name));
-    fs::write(&header_path, header)?;
+    // Generate user header
+    let user_header = c_header::generate_user_header(analyzed)?;
+    let user_header_path = output_dir.join(format!("{}.h", analyzed.name));
+    fs::write(&user_header_path, user_header)?;
 
     if verbose {
-        println!("    → {}", header_path.display());
+        println!("    → {}", user_header_path.display());
+    }
+
+    // Generate server header
+    let server_header = c_header::generate_server_header(analyzed)?;
+    let server_header_path = output_dir.join(format!("{}Server.h", analyzed.name));
+    fs::write(&server_header_path, server_header)?;
+
+    if verbose {
+        println!("    → {}", server_header_path.display());
     }
 
     Ok(())

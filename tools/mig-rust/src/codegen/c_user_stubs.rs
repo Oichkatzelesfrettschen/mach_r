@@ -5,13 +5,13 @@ use crate::parser::ast::Direction;
 use super::CodegenError;
 
 pub struct CUserStubGenerator {
-    user_prefix: String,
+    _user_prefix: String,
 }
 
 impl CUserStubGenerator {
     pub fn new() -> Self {
         Self {
-            user_prefix: String::new(),
+            _user_prefix: String::new(),
         }
     }
 
@@ -41,36 +41,99 @@ impl CUserStubGenerator {
         Ok(output)
     }
 
+    /// Generate function parameters including count parameters for arrays
+    fn generate_function_parameters(&self, routine: &AnalyzedRoutine) -> Vec<String> {
+        let mut params = Vec::new();
+
+        for arg in &routine.routine.args {
+            // Check if this is an array parameter by checking the message layout
+            let is_array_in_request = routine.request_layout.fields.iter()
+                .any(|f| f.name == arg.name && f.is_array);
+            let is_array_in_reply = routine.reply_layout.as_ref()
+                .map(|layout| layout.fields.iter().any(|f| f.name == arg.name && f.is_array))
+                .unwrap_or(false);
+
+            let is_array = is_array_in_request || is_array_in_reply;
+
+            // Get the resolved C type from the message layout
+            let base_type = if is_array {
+                // For arrays, get the element type from the layout
+                let field_in_request = routine.request_layout.fields.iter()
+                    .find(|f| f.name == arg.name && f.is_array);
+                let field_in_reply = routine.reply_layout.as_ref()
+                    .and_then(|layout| layout.fields.iter().find(|f| f.name == arg.name && f.is_array));
+
+                let field = field_in_request.or(field_in_reply);
+                if let Some(f) = field {
+                    // The c_type in the layout is the resolved element type
+                    f.c_type.trim_end_matches('*').trim().to_string()
+                } else {
+                    // Fallback to AST type
+                    self.get_c_type_for_arg(arg).trim_end_matches('*').trim().to_string()
+                }
+            } else {
+                // For non-arrays, use AST type
+                self.get_c_type_for_arg(arg)
+            };
+
+            // Generate the main parameter
+            let param = match arg.direction {
+                Direction::Out | Direction::InOut => {
+                    if is_array {
+                        // For arrays, always use pointer
+                        format!("    {} *{}", base_type, arg.name)
+                    } else {
+                        format!("    {} *{}", base_type, arg.name)
+                    }
+                }
+                Direction::In | Direction::RequestPort => {
+                    if is_array {
+                        // For IN arrays, use const pointer
+                        format!("    const {} *{}", base_type, arg.name)
+                    } else {
+                        format!("    {} {}", base_type, arg.name)
+                    }
+                }
+                _ => format!("    {} {}", base_type, arg.name),
+            };
+            params.push(param);
+
+            // For IN arrays, add count parameter immediately after the array
+            if is_array && matches!(arg.direction, Direction::In | Direction::InOut) {
+                params.push(format!("    mach_msg_type_number_t {}Cnt", arg.name));
+            }
+
+            // For OUT arrays, add count parameter as pointer
+            if is_array && matches!(arg.direction, Direction::Out | Direction::InOut) {
+                if matches!(arg.direction, Direction::Out) {
+                    params.push(format!("    mach_msg_type_number_t *{}Cnt", arg.name));
+                }
+            }
+        }
+
+        params
+    }
+
     /// Generate a single user stub
-    fn generate_user_stub(&self, routine: &AnalyzedRoutine, subsystem_name: &str) -> Result<String, CodegenError> {
+    fn generate_user_stub(&self, routine: &AnalyzedRoutine, _subsystem_name: &str) -> Result<String, CodegenError> {
         let mut output = String::new();
 
         // Function signature
         output.push_str(&format!("kern_return_t {}(\n", routine.user_function_name));
 
-        // Parameters
-        for (i, arg) in routine.routine.args.iter().enumerate() {
-            let c_type = self.get_c_type_for_arg(arg);
-            let param = match arg.direction {
-                Direction::Out | Direction::InOut => {
-                    format!("    {} *{}", c_type, arg.name)
-                }
-                Direction::In | Direction::RequestPort => {
-                    format!("    {} {}", c_type, arg.name)
-                }
-                _ => format!("    {} {}", c_type, arg.name),
-            };
-
-            output.push_str(&param);
-            if i < routine.routine.args.len() - 1 {
-                output.push_str(",\n");
-            } else {
-                output.push_str(")\n");
-            }
-        }
-
-        if routine.routine.args.is_empty() {
+        // Generate parameters including count parameters for arrays
+        let params = self.generate_function_parameters(routine);
+        if params.is_empty() {
             output.push_str("    void)\n");
+        } else {
+            for (i, param) in params.iter().enumerate() {
+                output.push_str(&param);
+                if i < params.len() - 1 {
+                    output.push_str(",\n");
+                } else {
+                    output.push_str(")\n");
+                }
+            }
         }
 
         output.push_str("{\n");
@@ -207,15 +270,15 @@ impl CUserStubGenerator {
                 output.push_str(&format!("    Mess.In.{}.msgt_deallocate = FALSE;\n", field.name));
                 output.push_str(&format!("    Mess.In.{}.msgt_unused = 0;\n", field.name));
             } else if field.is_count_field {
-                // Count field - for now, set to max or 0 (TODO: get actual count from parameter)
-                let count = field.max_array_elements.unwrap_or(0);
-                output.push_str(&format!("    Mess.In.{} = {}; /* TODO: use actual array count */\n", field.name, count));
+                // Count field - use the actual count parameter
+                output.push_str(&format!("    Mess.In.{} = {};\n", field.name, field.name));
             } else if !field.is_array {
                 // Regular data field
                 output.push_str(&format!("    Mess.In.{} = {};\n", field.name, field.name));
             } else {
-                // Array data field
-                output.push_str(&format!("    Mess.In.{} = {}; /* TODO: handle array data */\n", field.name, field.name));
+                // Array data field - for inline arrays, assign pointer directly
+                output.push_str(&format!("    Mess.In.{} = (typeof(Mess.In.{})){};\n",
+                    field.name, field.name, field.name));
             }
         }
 
@@ -231,13 +294,23 @@ impl CUserStubGenerator {
 
         if let Some(ref reply_layout) = routine.reply_layout {
             for field in &reply_layout.fields {
-                // Skip type descriptors, RetCode, and count fields (for now)
-                if !field.is_type_descriptor && field.name != "RetCode" && !field.is_count_field {
-                    if field.is_array {
-                        output.push_str(&format!("    *{} = Mess.Out.{}; /* TODO: handle array unpacking */\n", field.name, field.name));
-                    } else {
-                        output.push_str(&format!("    *{} = Mess.Out.{};\n", field.name, field.name));
-                    }
+                // Skip type descriptors and RetCode
+                if field.is_type_descriptor || field.name == "RetCode" {
+                    continue;
+                }
+
+                if field.is_count_field {
+                    // This is a count field - extract and set the count parameter from type descriptor
+                    let array_name = field.name.strip_suffix("Cnt").unwrap_or(&field.name);
+                    output.push_str(&format!("    *{}Cnt = Mess.Out.{}Type.msgt_number;\n", array_name, array_name));
+                } else if field.is_array {
+                    // For OUT arrays: Note that proper inline array support requires
+                    // message structure changes. For now, this is a placeholder.
+                    output.push_str(&format!("    /* TODO: Implement proper inline array unpacking for {} */\n", field.name));
+                    output.push_str(&format!("    /* Would need memcpy from inline message data */\n"));
+                } else {
+                    // Regular scalar output parameter
+                    output.push_str(&format!("    *{} = Mess.Out.{};\n", field.name, field.name));
                 }
             }
         }

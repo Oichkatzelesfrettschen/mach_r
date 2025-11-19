@@ -5,13 +5,13 @@ use crate::parser::ast::Direction;
 use super::CodegenError;
 
 pub struct CServerStubGenerator {
-    server_prefix: String,
+    _server_prefix: String,
 }
 
 impl CServerStubGenerator {
     pub fn new() -> Self {
         Self {
-            server_prefix: "_X".to_string(),
+            _server_prefix: "_X".to_string(),
         }
     }
 
@@ -75,35 +75,97 @@ impl CServerStubGenerator {
         output.push_str("extern kern_return_t ");
         output.push_str(&format!("{}_impl(\n", routine.name));
 
-        // Parameters
-        for (i, arg) in routine.routine.args.iter().enumerate() {
-            let c_type = self.get_c_type_for_arg(arg);
-            let param = match arg.direction {
-                Direction::Out | Direction::InOut => {
-                    format!("    {} *{}", c_type, arg.name)
-                }
-                Direction::In | Direction::RequestPort => {
-                    format!("    {} {}", c_type, arg.name)
-                }
-                _ => format!("    {} {}", c_type, arg.name),
-            };
-
-            output.push_str(&param);
-            if i < routine.routine.args.len() - 1 {
-                output.push_str(",\n");
-            }
-        }
-
-        if routine.routine.args.is_empty() {
+        // Generate parameters with layout-based type resolution
+        let params = self.generate_impl_parameters(routine);
+        if params.is_empty() {
             output.push_str("    void");
+        } else {
+            for (i, param) in params.iter().enumerate() {
+                output.push_str(&param);
+                if i < params.len() - 1 {
+                    output.push_str(",\n");
+                }
+            }
         }
 
         output.push_str(");\n");
         Ok(output)
     }
 
+    /// Generate implementation function parameters with resolved types
+    fn generate_impl_parameters(&self, routine: &AnalyzedRoutine) -> Vec<String> {
+        let mut params = Vec::new();
+
+        for arg in &routine.routine.args {
+            // Check if this is an array parameter by checking the message layout
+            let is_array_in_request = routine.request_layout.fields.iter()
+                .any(|f| f.name == arg.name && f.is_array);
+            let is_array_in_reply = routine.reply_layout.as_ref()
+                .map(|layout| layout.fields.iter().any(|f| f.name == arg.name && f.is_array))
+                .unwrap_or(false);
+
+            let is_array = is_array_in_request || is_array_in_reply;
+
+            // Get the resolved C type from the message layout
+            let base_type = if is_array {
+                // For arrays, get the element type from the layout
+                let field_in_request = routine.request_layout.fields.iter()
+                    .find(|f| f.name == arg.name && f.is_array);
+                let field_in_reply = routine.reply_layout.as_ref()
+                    .and_then(|layout| layout.fields.iter().find(|f| f.name == arg.name && f.is_array));
+
+                let field = field_in_request.or(field_in_reply);
+                if let Some(f) = field {
+                    // The c_type in the layout is the resolved element type
+                    f.c_type.trim_end_matches('*').trim().to_string()
+                } else {
+                    // Fallback to AST type
+                    self.get_c_type_for_arg(arg).trim_end_matches('*').trim().to_string()
+                }
+            } else {
+                // For non-arrays, use AST type
+                self.get_c_type_for_arg(arg)
+            };
+
+            // Generate the parameter
+            let param = match arg.direction {
+                Direction::Out | Direction::InOut => {
+                    if is_array {
+                        format!("    {} *{}", base_type, arg.name)
+                    } else {
+                        format!("    {} *{}", base_type, arg.name)
+                    }
+                }
+                Direction::In | Direction::RequestPort => {
+                    if is_array {
+                        // For IN arrays, use const pointer
+                        format!("    const {} *{}", base_type, arg.name)
+                    } else {
+                        format!("    {} {}", base_type, arg.name)
+                    }
+                }
+                _ => format!("    {} {}", base_type, arg.name),
+            };
+            params.push(param);
+
+            // For IN arrays, add count parameter immediately after the array
+            if is_array && matches!(arg.direction, Direction::In | Direction::InOut) {
+                params.push(format!("    mach_msg_type_number_t {}Cnt", arg.name));
+            }
+
+            // For OUT arrays, add count parameter as pointer
+            if is_array && matches!(arg.direction, Direction::Out | Direction::InOut) {
+                if matches!(arg.direction, Direction::Out) {
+                    params.push(format!("    mach_msg_type_number_t *{}Cnt", arg.name));
+                }
+            }
+        }
+
+        params
+    }
+
     /// Generate a single server stub (_X routine)
-    fn generate_server_stub(&self, routine: &AnalyzedRoutine, subsystem_name: &str) -> Result<String, CodegenError> {
+    fn generate_server_stub(&self, routine: &AnalyzedRoutine, _subsystem_name: &str) -> Result<String, CodegenError> {
         let mut output = String::new();
 
         // Function signature
@@ -155,36 +217,28 @@ impl CServerStubGenerator {
     fn generate_server_message_structures(&self, routine: &AnalyzedRoutine) -> Result<String, CodegenError> {
         let mut output = String::new();
 
-        // Request structure
+        // Request structure - use layout fields directly
         output.push_str("    typedef struct {\n");
         output.push_str("        mach_msg_header_t Head;\n");
 
-        for arg in &routine.routine.args {
-            if matches!(arg.direction, Direction::In | Direction::InOut | Direction::RequestPort) {
-                output.push_str(&format!("        mach_msg_type_t {}Type;\n", arg.name));
-                let c_type = self.get_c_type_for_arg(arg);
-                output.push_str(&format!("        {} {};\n", c_type, arg.name));
-            }
+        for field in &routine.request_layout.fields {
+            output.push_str(&format!("        {} {};\n", field.c_type, field.name));
         }
 
         output.push_str("    } Request;\n\n");
 
         // Reply structure (if not simpleroutine)
         if !routine.is_simple {
-            output.push_str("    typedef struct {\n");
-            output.push_str("        mach_msg_header_t Head;\n");
-            output.push_str("        mach_msg_type_t RetCodeType;\n");
-            output.push_str("        kern_return_t RetCode;\n");
+            if let Some(ref reply_layout) = routine.reply_layout {
+                output.push_str("    typedef struct {\n");
+                output.push_str("        mach_msg_header_t Head;\n");
 
-            for arg in &routine.routine.args {
-                if matches!(arg.direction, Direction::Out | Direction::InOut) {
-                    output.push_str(&format!("        mach_msg_type_t {}Type;\n", arg.name));
-                    let c_type = self.get_c_type_for_arg(arg);
-                    output.push_str(&format!("        {} {};\n", c_type, arg.name));
+                for field in &reply_layout.fields {
+                    output.push_str(&format!("        {} {};\n", field.c_type, field.name));
                 }
-            }
 
-            output.push_str("    } Reply;\n\n");
+                output.push_str("    } Reply;\n\n");
+            }
         }
 
         Ok(output)
@@ -247,11 +301,24 @@ impl CServerStubGenerator {
             }
         }
 
-        // Declare variables for OUT parameters
-        for arg in &routine.routine.args {
-            if matches!(arg.direction, Direction::Out) {
-                let c_type = self.get_c_type_for_arg(arg);
-                output.push_str(&format!("    {} {};\n", c_type, arg.name));
+        // Declare variables for OUT parameters with resolved types
+        if let Some(ref reply_layout) = routine.reply_layout {
+            for field in &reply_layout.fields {
+                // Skip type descriptors, RetCode, and count fields
+                if field.is_type_descriptor || field.name == "RetCode" || field.is_count_field {
+                    continue;
+                }
+
+                // Declare local variable for OUT parameter
+                // For arrays, use pointer type; for scalars, use value type
+                if field.is_array {
+                    // For OUT arrays, declare as pointer (matches impl signature)
+                    output.push_str(&format!("    {} {};\n", field.c_type, field.name));
+                    // Also declare count variable for OUT arrays
+                    output.push_str(&format!("    mach_msg_type_number_t {}Cnt;\n", field.name));
+                } else {
+                    output.push_str(&format!("    {} {};\n", field.c_type, field.name));
+                }
             }
         }
 
@@ -271,8 +338,22 @@ impl CServerStubGenerator {
 
         output.push_str(&format!("{}_impl(\n", routine.name));
 
-        // Build argument list
-        for (i, arg) in routine.routine.args.iter().enumerate() {
+        // Build argument list with count parameters for arrays
+        let mut first = true;
+        for arg in &routine.routine.args {
+            // Check if this argument is an array
+            let is_array_in_request = routine.request_layout.fields.iter()
+                .any(|f| f.name == arg.name && f.is_array);
+            let is_array_in_reply = routine.reply_layout.as_ref()
+                .map(|layout| layout.fields.iter().any(|f| f.name == arg.name && f.is_array))
+                .unwrap_or(false);
+            let is_array = is_array_in_request || is_array_in_reply;
+
+            if !first {
+                output.push_str(",\n");
+            }
+            first = false;
+
             output.push_str("        ");
 
             match arg.direction {
@@ -293,14 +374,22 @@ impl CServerStubGenerator {
                 }
             }
 
-            if i < routine.routine.args.len() - 1 {
-                output.push_str(",\n");
+            // Add count parameter for arrays
+            if is_array {
+                if matches!(arg.direction, Direction::In | Direction::InOut) {
+                    // IN array: pass count value
+                    output.push_str(",\n        ");
+                    output.push_str(&format!("{}Cnt", arg.name));
+                }
+                if matches!(arg.direction, Direction::Out) {
+                    // OUT array: pass count pointer
+                    output.push_str(",\n        ");
+                    output.push_str(&format!("&{}Cnt", arg.name));
+                }
             }
         }
 
-        if routine.routine.args.is_empty() {
-            // No arguments
-        } else {
+        if !routine.routine.args.is_empty() {
             output.push('\n');
         }
 

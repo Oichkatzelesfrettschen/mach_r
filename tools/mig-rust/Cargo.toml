@@ -14,3 +14,13 @@ path = "src/main.rs"
 [dependencies]
 # Pure Rust CLI argument parsing
 clap = { version = "4.5.51", features = ["derive"] }
+
+# Error handling
+thiserror = "2.0"
+
+[dev-dependencies]
+# Property-based testing
+proptest = "1.5"
+
+# Integration testing
+tempfile = "3.14"

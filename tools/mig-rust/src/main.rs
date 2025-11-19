@@ -8,6 +8,7 @@ use mig_rust::parser::Parser as MigParser;
 use mig_rust::codegen::c_user_stubs::CUserStubGenerator;
 use mig_rust::codegen::c_server_stubs::CServerStubGenerator;
 use mig_rust::codegen::c_header;
+use mig_rust::codegen::rust_stubs::RustStubGenerator;
 
 #[derive(Parser)]
 #[command(name = "mig-rust")]
@@ -144,7 +145,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         if cli.rust {
-            println!("Warning: Rust code generation not yet implemented");
+            generate_rust_stubs(&analyzed, &cli.output, cli.verbose)?;
         }
 
         println!("✓ {} - Generated successfully", file_path.display());
@@ -220,6 +221,30 @@ fn generate_c_server(
 
     if verbose {
         println!("    → {}", server_path.display());
+    }
+
+    Ok(())
+}
+
+fn generate_rust_stubs(
+    analyzed: &AnalyzedSubsystem,
+    output_dir: &PathBuf,
+    verbose: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if verbose {
+        println!("  Generating Rust stubs...");
+    }
+
+    let generator = RustStubGenerator::new()
+        .with_async()         // Generate async API
+        .with_server_traits(); // Generate server traits
+
+    let rust_impl = generator.generate(analyzed)?;
+    let rust_path = output_dir.join(format!("{}.rs", analyzed.name));
+    fs::write(&rust_path, rust_impl)?;
+
+    if verbose {
+        println!("    → {} (type-safe Rust IPC)", rust_path.display());
     }
 
     Ok(())

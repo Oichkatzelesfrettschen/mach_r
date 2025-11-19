@@ -139,9 +139,13 @@ global_asm!(
     "    mov cr0, eax",
 
     "    # Now we're in compatibility mode (32-bit code in 64-bit mode)",
-    "    # Load 64-bit GDT and jump to 64-bit code",
+    "    # Load 64-bit GDT and far jump to 64-bit code",
     "    lgdt [gdt64_pointer]",
-    "    jmp 0x08:.Llong_mode_start",          // Jump to 64-bit code segment
+    "    # Far jump using push + retf",
+    "    push 0x08",                            // Push code segment selector
+    "    lea eax, [.Llong_mode_start]",
+    "    push eax",                             // Push offset
+    "    retf",                                 // Far return (acts as far jump)
 
     // Error handlers (32-bit)
     ".Lno_multiboot:",

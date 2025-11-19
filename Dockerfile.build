@@ -85,8 +85,7 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 # Add Rust bare-metal targets
 RUN /root/.cargo/bin/rustup target add \
     x86_64-unknown-none \
-    aarch64-unknown-none \
-    riscv64gc-unknown-none
+    aarch64-unknown-none
 
 # Install Rust components (separate layer)
 RUN /root/.cargo/bin/rustup component add \

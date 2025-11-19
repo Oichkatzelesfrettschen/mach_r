@@ -5,16 +5,14 @@
 #   docker-compose -f docker-compose.build.yml build
 #   docker-compose -f docker-compose.build.yml run builder
 
-version: '3.8'
-
 services:
   # Main build service
   builder:
+    # Force x86_64 platform for compatibility
+    platform: linux/amd64
     build:
       context: .
       dockerfile: Dockerfile.build
-      # Force x86_64 platform for compatibility
-      platform: linux/amd64
       # Use BuildKit for faster builds
       cache_from:
         - mach_r_builder:latest

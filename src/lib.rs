@@ -5,6 +5,7 @@
 
 #![no_std]
 #![cfg_attr(not(test), no_main)]
+#![allow(dead_code)] // TODO: Remove once all features are implemented
 // #![feature(alloc_error_handler)] // Only on nightly
 
 // Standard library replacement for no_std
@@ -66,33 +67,33 @@ pub const NAME: &str = "Mach_R";
 /// Initialize the kernel library
 pub fn init() {
     // Initialize pure Rust stack components
-    if let Err(e) = net::init() {
+    if let Err(_e) = net::init() {
         // Handle network initialization error
     }
-    
-    if let Err(e) = fs::init() {
+
+    if let Err(_e) = fs::init() {
         // Handle filesystem initialization error
     }
-    
-    if let Err(e) = vm::init() {
+
+    if let Err(_e) = vm::init() {
         // Handle VM initialization error
     }
-    
+
     // Initialize system components
-    if let Err(e) = shell::init() {
+    if let Err(_e) = shell::init() {
         // Handle shell initialization error
     }
-    
-    if let Err(e) = build::init() {
+
+    if let Err(_e) = build::init() {
         // Handle build system initialization error
     }
-    
-    if let Err(e) = coreutils::init() {
+
+    if let Err(_e) = coreutils::init() {
         // Handle coreutils initialization error
     }
-    
+
     // Initialize init system
-    if let Err(e) = init::init() {
+    if let Err(_e) = init::init() {
         // Handle init system initialization error
     }
 }

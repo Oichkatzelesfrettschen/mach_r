@@ -198,6 +198,7 @@ impl NameServer {
     }
     
     /// Handle register request
+    #[allow(dead_code)]
     fn handle_register(&self, msg: Message, req: &NameServerRequest) -> Option<Message> {
         let data = msg.data();
         let req_size = core::mem::size_of::<NameServerRequest>();
@@ -218,16 +219,15 @@ impl NameServer {
         };
         
         // Get the port to register from payload after the name
-        let mut port_id = PortId(0);
         let port_pos = req_size + req.name_len as usize;
-        if data.len() >= port_pos + core::mem::size_of::<u64>() {
+        let port_id = if data.len() >= port_pos + core::mem::size_of::<u64>() {
             let mut buf = [0u8; 8];
             buf.copy_from_slice(&data[port_pos..port_pos+8]);
-            port_id = PortId(u64::from_le_bytes(buf));
+            PortId(u64::from_le_bytes(buf))
         } else {
             let reply_to = msg.header.local_port.unwrap_or(msg.remote_port());
             return Some(self.create_error_reply(reply_to, -1));
-        }
+        };
         let owner_task = TaskId(1); // Simplified - would get from message context
         
         let reply_to = msg.header.local_port.unwrap_or(msg.remote_port());
@@ -238,6 +238,7 @@ impl NameServer {
     }
     
     /// Handle lookup request
+    #[allow(dead_code)]
     fn handle_lookup(&self, msg: Message, req: &NameServerRequest) -> Option<Message> {
         let data = msg.data();
         let req_size = core::mem::size_of::<NameServerRequest>();
@@ -265,6 +266,7 @@ impl NameServer {
     }
     
     /// Handle unregister request
+    #[allow(dead_code)]
     fn handle_unregister(&self, msg: Message, req: &NameServerRequest) -> Option<Message> {
         let data = msg.data();
         let req_size = core::mem::size_of::<NameServerRequest>();
@@ -294,6 +296,7 @@ impl NameServer {
     }
     
     /// Handle list request
+    #[allow(dead_code)]
     fn handle_list(&self, msg: Message, _req: &NameServerRequest) -> Option<Message> {
         let names = self.list(None);
         let mut reply_data = Vec::new();
@@ -324,18 +327,21 @@ impl NameServer {
     }
     
     /// Handle check-in request (Mach-style service registration)
+    #[allow(dead_code)]
     fn handle_checkin(&self, msg: Message, req: &NameServerRequest) -> Option<Message> {
         // Check-in is like register but with bootstrap semantics
         self.handle_register(msg, req)
     }
-    
+
     /// Handle check-out request (Mach-style service lookup)
+    #[allow(dead_code)]
     fn handle_checkout(&self, msg: Message, req: &NameServerRequest) -> Option<Message> {
         // Check-out is like lookup but with bootstrap semantics
         self.handle_lookup(msg, req)
     }
     
     /// Create success reply
+    #[allow(dead_code)]
     fn create_success_reply(&self, remote_port: PortId, result_port: PortId) -> Message {
         let reply = NameServerReply {
             result: 0,
@@ -354,6 +360,7 @@ impl NameServer {
     }
     
     /// Create error reply
+    #[allow(dead_code)]
     fn create_error_reply(&self, remote_port: PortId, error_code: i32) -> Message {
         let reply = NameServerReply {
             result: error_code,
@@ -415,7 +422,7 @@ pub fn name_server() -> &'static NameServer {
 
 /// Process messages for the Name Server (called by scheduler)
 pub fn process_messages() {
-    let ns = name_server();
+    let _ns = name_server();
     
     // In a real implementation, this would:
     // 1. Check for incoming messages on the server port
@@ -439,7 +446,7 @@ pub fn process_messages() {
 
     #[test]
         fn mig_style_register_lookup_roundtrip() {
-        let ns = NameServer::new(TaskId(10));
+        let _ns = NameServer::new(TaskId(10));
         let caller_port = PortId(123);
         let name = "svc";
         let req = Req{ op: NameServerOp::Register, name_len: name.len() as u32 };
@@ -470,7 +477,7 @@ pub fn process_messages() {
         #[test]
         fn e2e_register_via_port_and_reply() {
             // Set up name server with real port
-        let ns = NameServer::new(TaskId(10));
+        let _ns = NameServer::new(TaskId(10));
         // Client reply port
         let reply = Port::new(TaskId(99));
         // Build a register request message with local (reply) port set

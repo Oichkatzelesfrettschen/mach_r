@@ -47,32 +47,7 @@ See [ROADMAP.md](ROADMAP.md) for detailed development timeline and [docs/project
   rustup target add x86_64-unknown-none
   ```
 
-### Building
-
-```bash
-# Clone the repository
-git clone https://github.com/YOUR_USERNAME/Synthesis.git
-cd Synthesis
-
-# Build the kernel (AArch64 default)
-cargo build --lib
-
-# Run tests
-cargo test --lib
-
-# Build for release
-cargo build --release --lib
-```
-
-### Running in QEMU
-
-```bash
-# Build and run kernel with QEMU (requires kernel binary)
-make qemu
-
-# Or use the test boot script
-./test-boot.sh
-```
+##
 
 ## Architecture
 
@@ -161,30 +136,61 @@ Synthesis/
 
 ## Development
 
+### Building and Running
+
+Mach_R uses `cargo xtask` for all build and run operations.
+
+```bash
+# Clone the repository
+git clone https://github.com/YOUR_USERNAME/Synthesis.git
+cd Synthesis
+
+# List all available xtask commands
+cargo xtask help
+
+# Build the kernel (AArch64 release by default)
+cargo xtask kernel
+
+# Build kernel for x86_64 release
+cargo xtask kernel --target x86_64
+
+# Run the kernel in QEMU (AArch64 by default)
+cargo xtask qemu
+
+# Run x86_64 kernel in QEMU
+cargo xtask qemu --target x86_64
+
+# Build a bootable disk image (for x86_64, default size 128MB)
+cargo xtask disk-image --target x86_64
+
+# Build a bootable ISO image (for x86_64)
+cargo xtask iso-image --target x86_64
+
+# Run all tests
+cargo xtask test
+
+# Check code style, lints, and build (fmt-check, clippy, test)
+cargo xtask check
 ### Building from Source
 
 ```bash
-# Install dependencies
-rustup component add rust-src
-rustup target add aarch64-unknown-none x86_64-unknown-none
+# Install dependencies (rustup targets and components are checked by 'env-check')
+cargo xtask env-check
 
-# Build library
-cd Synthesis
-cargo build --lib
-
-# Run unit tests
-cargo test --lib
-
-# Build kernel binary
-make kernel
+# Build the kernel (AArch64 release by default)
+cargo xtask kernel
 
 # Run in QEMU
-make qemu
+cargo xtask qemu
 ```
 
 ### Running Tests
 
 ```bash
+# Run all xtask tests
+cargo xtask test
+
+# Or directly using cargo:
 # Unit tests
 cargo test --lib
 
@@ -201,13 +207,13 @@ Mach_R follows Rust standard style guidelines:
 
 ```bash
 # Format code
-cargo fmt
+cargo xtask fmt
 
 # Run linter
-cargo clippy
+cargo xtask clippy
 
-# Check without building
-cargo check
+# Check without building (fmt-check, clippy, test)
+cargo xtask check
 ```
 
 ## Contributing

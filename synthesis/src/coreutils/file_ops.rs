@@ -14,9 +14,9 @@ pub fn ls(args: &[&str]) -> Result<CommandResult, &'static str> {
     let (flags, params) = parse_args(args)?;
     let long_format = has_flag(&flags, "-l");
     let show_all = has_flag(&flags, "-a");
-    
+
     let mut result = CommandResult::success();
-    
+
     if params.is_empty() {
         // List current directory
         result.add_output(".\n")?;
@@ -103,7 +103,7 @@ pub fn mv(args: &[&str]) -> Result<CommandResult, &'static str> {
 pub fn rm(args: &[&str]) -> Result<CommandResult, &'static str> {
     let (flags, params) = parse_args(args)?;
     let recursive = has_flag(&flags, "-r") || has_flag(&flags, "-R");
-    let force = has_flag(&flags, "-f");
+    let _force = has_flag(&flags, "-f");
     
     if params.is_empty() {
         return CommandResult::error(1, "rm: missing operand");
@@ -256,7 +256,7 @@ pub fn find(args: &[&str]) -> Result<CommandResult, &'static str> {
 pub fn du(args: &[&str]) -> Result<CommandResult, &'static str> {
     let (flags, params) = parse_args(args)?;
     let human_readable = has_flag(&flags, "-h");
-    let summarize = has_flag(&flags, "-s");
+    let _summarize = has_flag(&flags, "-s");
     
     let mut result = CommandResult::success();
     

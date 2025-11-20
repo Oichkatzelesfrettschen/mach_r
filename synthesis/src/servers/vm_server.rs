@@ -164,6 +164,7 @@ impl VmServer {
         crate::mig::generated::vm::dispatch(self, &msg)
     }
     
+    #[allow(dead_code)]
     fn handle_allocate(&self, msg: Message) -> Option<Message> {
         let data = msg.data();
         if data.len() < 12 {
@@ -193,6 +194,7 @@ impl VmServer {
         }
     }
     
+    #[allow(dead_code)]
     fn handle_deallocate(&self, msg: Message) -> Option<Message> {
         let data = msg.data();
         if data.len() < 20 {
@@ -216,6 +218,7 @@ impl VmServer {
         }
     }
     
+    #[allow(dead_code)]
     fn handle_protect(&self, msg: Message) -> Option<Message> {
         let data = msg.data();
         if data.len() < 24 {
@@ -240,21 +243,25 @@ impl VmServer {
         }
     }
     
+    #[allow(dead_code)]
     fn handle_map(&self, _msg: Message) -> Option<Message> {
         // Simplified - not implemented
         None
     }
-    
+
+    #[allow(dead_code)]
     fn handle_unmap(&self, _msg: Message) -> Option<Message> {
         // Simplified - not implemented
         None
     }
-    
+
+    #[allow(dead_code)]
     fn create_success_reply(&self, remote_port: PortId) -> Message {
         let reply_data = 0i32.to_le_bytes().to_vec();
         Message::new_out_of_line(remote_port, reply_data)
     }
     
+    #[allow(dead_code)]
     fn create_error_reply(&self, remote_port: PortId, errno: i32) -> Message {
         let reply_data = errno.to_le_bytes().to_vec();
         Message::new_out_of_line(remote_port, reply_data)

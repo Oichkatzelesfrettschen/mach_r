@@ -53,7 +53,19 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Kernel name
 pub const NAME: &str = "Mach_R";
 
-// Panic handler is in main.rs for the binary
+// Panic handler for staticlib
+#[cfg(not(test))]
+#[panic_handler]
+fn panic(_info: &core::panic::PanicInfo) -> ! {
+    // TODO: Print panic message to serial console once initialization is complete
+    // For now, just halt the CPU
+    loop {
+        #[cfg(target_arch = "x86_64")]
+        unsafe { core::arch::asm!("hlt"); }
+        #[cfg(target_arch = "aarch64")]
+        unsafe { core::arch::asm!("wfe"); }
+    }
+}
 
 // Custom allocator error handler (nightly only)
 // #[cfg(not(test))]
@@ -65,33 +77,33 @@ pub const NAME: &str = "Mach_R";
 /// Initialize the kernel library
 pub fn init() {
     // Initialize pure Rust stack components
-    if let Err(e) = net::init() {
+    if let Err(_e) = net::init() {
         // Handle network initialization error
     }
     
-    if let Err(e) = fs::init() {
+    if let Err(_e) = fs::init() {
         // Handle filesystem initialization error
     }
     
-    if let Err(e) = vm::init() {
+    if let Err(_e) = vm::init() {
         // Handle VM initialization error
     }
     
     // Initialize system components
-    if let Err(e) = shell::init() {
+    if let Err(_e) = shell::init() {
         // Handle shell initialization error
     }
     
-    if let Err(e) = build::init() {
+    if let Err(_e) = build::init() {
         // Handle build system initialization error
     }
     
-    if let Err(e) = coreutils::init() {
+    if let Err(_e) = coreutils::init() {
         // Handle coreutils initialization error
     }
     
     // Initialize init system
-    if let Err(e) = init::init() {
+    if let Err(_e) = init::init() {
         // Handle init system initialization error
     }
 }

@@ -168,5 +168,5 @@ pub fn init() -> Result<(), &'static str> {
 
 /// Get the global VM manager
 pub fn get_manager() -> Option<&'static mut VmManager> {
-    unsafe { VM_MANAGER.as_mut() }
+    unsafe { (*core::ptr::addr_of_mut!(VM_MANAGER)).as_mut() }
 }

@@ -18,7 +18,7 @@ static mut ERRNO: i32 = 0;
 /// Get current errno value
 #[no_mangle]
 pub extern "C" fn __errno_location() -> *mut i32 {
-    unsafe { core::ptr::addr_of_mut!(ERRNO) }
+    core::ptr::addr_of_mut!(ERRNO)
 }
 
 /// Set errno and return -1

@@ -1,6 +1,11 @@
 //! Timer driver implementation
 
-use super::{Driver, DriverError, PollStatus, DeviceDriver, DeviceInfo};
+use super::DriverError;
+
+#[cfg(target_arch = "aarch64")]
+use super::{Driver, DeviceDriver, DeviceInfo, PollStatus};
+
+#[cfg(target_arch = "aarch64")]
 use alloc::boxed::Box;
 
 #[cfg(target_arch = "aarch64")]
@@ -356,6 +361,7 @@ impl DeviceDriver for ArmV8TimerDriver {
 }
 
 /// Format timer information for display
+#[allow(dead_code)]
 fn format_timer_info(frequency: u64) -> heapless::String<64> {
     let mut result = heapless::String::new();
     
@@ -367,6 +373,7 @@ fn format_timer_info(frequency: u64) -> heapless::String<64> {
 }
 
 /// Simple frequency formatting
+#[allow(dead_code)]
 fn format_frequency(freq: u64) -> heapless::String<16> {
     let mut result = heapless::String::new();
     
@@ -386,6 +393,7 @@ fn format_frequency(freq: u64) -> heapless::String<16> {
 }
 
 /// Format number into string
+#[allow(dead_code)]
 fn format_number(s: &mut heapless::String<16>, n: usize) -> Result<(), ()> {
     if n == 0 {
         s.push('0')?;
@@ -431,9 +439,11 @@ pub fn init() -> Result<(), DriverError> {
 
 /// Global timer instance
 #[cfg(target_arch = "aarch64")]
+#[allow(dead_code)]
 static mut SYSTEM_TIMER: Option<ArmV8TimerDriver> = None;
 
 #[cfg(not(target_arch = "aarch64"))]
+#[allow(dead_code)]
 static mut SYSTEM_TIMER: Option<()> = None;
 
 /// Initialize system timer

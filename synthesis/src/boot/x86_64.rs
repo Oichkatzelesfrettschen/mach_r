@@ -1,8 +1,7 @@
 //! x86_64 specific bootloader components for Mach_R
 //! Pure Rust implementation for x86_64 architecture
 
-use super::{BootInfo, MemoryMapEntry, FramebufferInfo};
-use core::arch::asm;
+use super::BootInfo;
 
 /// x86_64 page table entry flags
 pub const PAGE_PRESENT: u64 = 1 << 0;
@@ -109,10 +108,10 @@ impl X86_64MemoryManager {
     pub fn map_page(
         &mut self,
         virtual_addr: u64,
-        physical_addr: u64,
-        flags: u64,
+        _physical_addr: u64,
+        _flags: u64,
     ) -> Result<(), &'static str> {
-        let indices = [
+        let _indices = [
             ((virtual_addr >> 39) & 0x1FF) as usize, // PML4 index
             ((virtual_addr >> 30) & 0x1FF) as usize, // PDPT index
             ((virtual_addr >> 21) & 0x1FF) as usize, // PD index
@@ -138,20 +137,20 @@ pub mod cpuid {
         #[cfg(target_arch = "x86_64")]
         unsafe {
             // Check for basic x86_64 features
-            let mut eax: u32;
+            let _eax: u32;
             let mut ebx: u32;
-            let mut ecx: u32;
+            let _ecx: u32;
             let mut edx: u32;
             
             // Check CPUID availability - avoid ebx register
             core::arch::asm!(
                 "mov eax, 1",
                 "cpuid",
-                out("eax") eax,
-                out("ecx") ecx,
+                out("eax") _eax,
+                out("ecx") _ecx,
                 out("edx") edx,
             );
-            ebx = 0; // Skip ebx due to LLVM conflicts
+            let _ = ebx; // ebx skipped due to LLVM conflicts
             
             // Check for PAE (Physical Address Extension)
             if (edx & (1 << 6)) == 0 {
@@ -172,10 +171,10 @@ pub mod cpuid {
         #[cfg(target_arch = "x86_64")]
         unsafe {
             let mut vendor = [0u8; 12];
-            let mut ebx: u32;
+            let ebx: u32;
             let mut ecx: u32;
             let mut edx: u32;
-            
+
             core::arch::asm!(
                 "mov eax, 0",
                 "cpuid",
@@ -184,7 +183,7 @@ pub mod cpuid {
                 out("eax") _,
             );
             ebx = 0; // Skip ebx due to LLVM conflicts
-            
+
             vendor[0..4].copy_from_slice(&ebx.to_le_bytes());
             vendor[4..8].copy_from_slice(&edx.to_le_bytes());
             vendor[8..12].copy_from_slice(&ecx.to_le_bytes());
@@ -411,7 +410,7 @@ pub fn init_x86_64() -> Result<(), &'static str> {
     // Set up basic GDT
     static mut GDT: segments::Gdt = segments::Gdt::new();
     unsafe {
-        segments::load_gdt(&GDT);
+        segments::load_gdt(&*(&raw const GDT));
     }
     
     Ok(())

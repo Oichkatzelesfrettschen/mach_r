@@ -7,6 +7,7 @@ use core::ptr::{read_volatile, write_volatile};
 use heapless::Vec;
 
 /// Maximum number of interrupts supported
+#[allow(dead_code)]
 const MAX_INTERRUPTS: usize = 1024;
 /// Maximum number of interrupt handlers
 const MAX_HANDLERS: usize = 256;
@@ -18,7 +19,9 @@ const GICD_ISENABLER: usize = 0x100;   // Interrupt Set-Enable Registers
 const GICD_ICENABLER: usize = 0x180;   // Interrupt Clear-Enable Registers
 const GICD_ISPENDR: usize = 0x200;     // Interrupt Set-Pending Registers
 const GICD_ICPENDR: usize = 0x280;     // Interrupt Clear-Pending Registers
+#[allow(dead_code)]
 const GICD_ISACTIVER: usize = 0x300;   // Interrupt Set-Active Registers
+#[allow(dead_code)]
 const GICD_ICACTIVER: usize = 0x380;   // Interrupt Clear-Active Registers
 const GICD_IPRIORITYR: usize = 0x400;  // Interrupt Priority Registers
 const GICD_ITARGETSR: usize = 0x800;   // Interrupt Processor Targets Registers
@@ -30,6 +33,7 @@ const GICC_PMR: usize = 0x004;         // Interrupt Priority Mask Register
 const GICC_BPR: usize = 0x008;         // Binary Point Register
 const GICC_IAR: usize = 0x00C;         // Interrupt Acknowledge Register
 const GICC_EOIR: usize = 0x010;        // End of Interrupt Register
+#[allow(dead_code)]
 const GICC_RPR: usize = 0x014;         // Running Priority Register
 const GICC_HPPIR: usize = 0x018;       // Highest Priority Pending Interrupt Register
 
@@ -38,14 +42,18 @@ const GICD_CTLR_ENABLE: u32 = 1 << 0;
 const GICC_CTLR_ENABLE: u32 = 1 << 0;
 
 /// Special interrupt numbers
+#[allow(dead_code)]
 const SGI_MAX: u32 = 15;               // Software Generated Interrupts
+#[allow(dead_code)]
 const PPI_MAX: u32 = 31;               // Private Peripheral Interrupts
 const SPI_BASE: u32 = 32;              // Shared Peripheral Interrupts start
 const SPURIOUS_INTERRUPT: u32 = 1023;
 
 /// Interrupt priority levels
+#[allow(dead_code)]
 const IRQ_PRIORITY_HIGH: u8 = 0x40;
 const IRQ_PRIORITY_NORMAL: u8 = 0x80;
+#[allow(dead_code)]
 const IRQ_PRIORITY_LOW: u8 = 0xC0;
 
 /// Interrupt handler function type

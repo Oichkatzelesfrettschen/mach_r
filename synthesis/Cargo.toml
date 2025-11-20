@@ -11,6 +11,7 @@ path = "src/main.rs"
 [lib]
 name = "mach_r"
 path = "src/lib.rs"
+crate-type = ["staticlib", "rlib"]  # Build both staticlib for linking and rlib for development
 
 [dependencies]
 # Core no_std dependencies for embedded development

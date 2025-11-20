@@ -83,16 +83,16 @@ pub trait MigClient {
     fn server_port(&self) -> &Port;
     
     /// Send a message and wait for reply
-    fn call(&self, msg: Message) -> Result<Message, MigError>;
+    fn call(&self, _msg: Message) -> Result<Message, MigError>;
     
     /// Send a message without waiting for reply
-    fn send(&self, msg: Message) -> Result<(), MigError>;
+    fn send(&self, _msg: Message) -> Result<(), MigError>;
 }
 
 /// Generated server stub
 pub trait MigServer {
     /// Dispatch a message to the appropriate handler
-    fn dispatch(&mut self, msg: Message) -> Option<Message>;
+    fn dispatch(&mut self, _msg: Message) -> Option<Message>;
 }
 
 /// MIG errors
@@ -369,7 +369,7 @@ pub mod vm_interface {
     }
     
     /// Unmarshal VM allocate reply
-    fn unmarshal_vm_allocate_reply(msg: &Message) -> Result<VmAllocateReply, MigError> {
+    fn unmarshal_vm_allocate_reply(_msg: &Message) -> Result<VmAllocateReply, MigError> {
         // In real implementation, would properly deserialize
         // For now, return dummy
         Ok(VmAllocateReply {

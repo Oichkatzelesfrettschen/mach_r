@@ -56,7 +56,7 @@ impl ProcessSupervisor {
     pub fn start_process(
         &mut self,
         command: &str,
-        env: &FnvIndexMap<heapless::String<32>, heapless::String<128>, 16>,
+        _env: &FnvIndexMap<heapless::String<32>, heapless::String<128>, 16>,
     ) -> Result<u32, &'static str> {
         // TODO: Implement actual process creation
         // This would involve:

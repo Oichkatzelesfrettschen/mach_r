@@ -133,6 +133,7 @@ pub enum MachPortRight {
 
 /// Message options for msg_send/receive
 #[derive(Debug, Clone, Copy)]
+#[allow(dead_code)]
 pub struct MsgOption(u64);
 
 impl MsgOption {
@@ -283,7 +284,7 @@ fn sys_msg_send(args: &[u64]) -> i64 {
         let msg_data = core::slice::from_raw_parts(msg_addr, msg_size.min(256));
         
         match Message::new_inline(port_id, msg_data) {
-            Ok(msg) => {
+            Ok(_msg) => {
                 // Would need to look up actual port
                 // For now, return success
                 SyscallResult::Success as i64
@@ -299,15 +300,15 @@ fn sys_msg_receive(args: &[u64]) -> i64 {
         return SyscallResult::InvalidArgument as i64;
     }
     
-    let port_id = PortId(args[0]);
-    let msg_addr = args[1] as *mut u8;
-    let msg_size = args[2] as usize;
-    
+    let _port_id = PortId(args[0]);
+    let _msg_addr = args[1] as *mut u8;
+    let _msg_size = args[2] as usize;
+
     // In real implementation:
     // 1. Check receive rights
     // 2. Dequeue message or block
     // 3. Copy to user space
-    
+
     SyscallResult::Success as i64
 }
 
@@ -433,8 +434,8 @@ fn sys_device_open(args: &[u64]) -> i64 {
         return SyscallResult::InvalidArgument as i64;
     }
     
-    let device_name_ptr = args[0] as *const u8;
-    let device_name_len = args[1] as usize;
+    let _device_name_ptr = args[0] as *const u8;
+    let _device_name_len = args[1] as usize;
     
     // TODO: Validate user pointer and copy name safely
     // For now, return mock device handle
@@ -447,7 +448,7 @@ fn sys_device_close(args: &[u64]) -> i64 {
         return SyscallResult::InvalidArgument as i64;
     }
     
-    let device_handle = args[0];
+    let _device_handle = args[0];
     
     // TODO: Close actual device handle
     SyscallResult::Success as i64
@@ -459,9 +460,9 @@ fn sys_device_read(args: &[u64]) -> i64 {
         return SyscallResult::InvalidArgument as i64;
     }
     
-    let device_handle = args[0];
-    let buffer_ptr = args[1] as *mut u8;
-    let buffer_size = args[2] as usize;
+    let _device_handle = args[0];
+    let _buffer_ptr = args[1] as *mut u8;
+    let _buffer_size = args[2] as usize;
     
     // TODO: Validate buffer and read from actual device
     0 // Bytes read
@@ -473,10 +474,10 @@ fn sys_device_write(args: &[u64]) -> i64 {
         return SyscallResult::InvalidArgument as i64;
     }
     
-    let device_handle = args[0];
-    let buffer_ptr = args[1] as *const u8;
+    let _device_handle = args[0];
+    let _buffer_ptr = args[1] as *const u8;
     let buffer_size = args[2] as usize;
-    
+
     // TODO: Validate buffer and write to actual device
     buffer_size as i64 // Bytes written
 }
@@ -487,9 +488,9 @@ fn sys_device_control(args: &[u64]) -> i64 {
         return SyscallResult::InvalidArgument as i64;
     }
     
-    let device_handle = args[0];
-    let command = args[1] as u32;
-    let arg = args[2];
+    let _device_handle = args[0];
+    let _command = args[1] as u32;
+    let _arg = args[2];
     
     // TODO: Call actual device control
     SyscallResult::Success as i64
@@ -501,8 +502,8 @@ fn sys_device_list(args: &[u64]) -> i64 {
         return SyscallResult::InvalidArgument as i64;
     }
     
-    let buffer_ptr = args[0] as *mut u8;
-    let buffer_size = args[1] as usize;
+    let _buffer_ptr = args[0] as *mut u8;
+    let _buffer_size = args[1] as usize;
     
     // TODO: Fill buffer with device list
     0 // Number of devices
@@ -514,8 +515,8 @@ fn sys_service_start(args: &[u64]) -> i64 {
         return SyscallResult::InvalidArgument as i64;
     }
     
-    let service_name_ptr = args[0] as *const u8;
-    let service_name_len = args[1] as usize;
+    let _service_name_ptr = args[0] as *const u8;
+    let _service_name_len = args[1] as usize;
     
     // TODO: Get service name safely from user space
     // TODO: Start actual service via init system
@@ -528,8 +529,8 @@ fn sys_service_stop(args: &[u64]) -> i64 {
         return SyscallResult::InvalidArgument as i64;
     }
     
-    let service_name_ptr = args[0] as *const u8;
-    let service_name_len = args[1] as usize;
+    let _service_name_ptr = args[0] as *const u8;
+    let _service_name_len = args[1] as usize;
     
     // TODO: Stop actual service via init system
     SyscallResult::Success as i64
@@ -541,8 +542,8 @@ fn sys_service_restart(args: &[u64]) -> i64 {
         return SyscallResult::InvalidArgument as i64;
     }
     
-    let service_name_ptr = args[0] as *const u8;
-    let service_name_len = args[1] as usize;
+    let _service_name_ptr = args[0] as *const u8;
+    let _service_name_len = args[1] as usize;
     
     // TODO: Restart actual service via init system
     SyscallResult::Success as i64
@@ -554,8 +555,8 @@ fn sys_service_status(args: &[u64]) -> i64 {
         return SyscallResult::InvalidArgument as i64;
     }
     
-    let service_name_ptr = args[0] as *const u8;
-    let service_name_len = args[1] as usize;
+    let _service_name_ptr = args[0] as *const u8;
+    let _service_name_len = args[1] as usize;
     
     // TODO: Get actual service status
     ServiceState::Running as i64 // Mock status
@@ -567,8 +568,8 @@ fn sys_service_list(args: &[u64]) -> i64 {
         return SyscallResult::InvalidArgument as i64;
     }
     
-    let buffer_ptr = args[0] as *mut u8;
-    let buffer_size = args[1] as usize;
+    let _buffer_ptr = args[0] as *mut u8;
+    let _buffer_size = args[1] as usize;
     
     // TODO: Fill buffer with service list
     0 // Number of services
@@ -580,15 +581,15 @@ fn sys_system_info(args: &[u64]) -> i64 {
         return SyscallResult::InvalidArgument as i64;
     }
     
-    let buffer_ptr = args[0] as *mut u8;
-    let buffer_size = args[1] as usize;
+    let _buffer_ptr = args[0] as *mut u8;
+    let _buffer_size = args[1] as usize;
     
     // TODO: Fill buffer with system info (kernel version, memory, etc.)
     SyscallResult::Success as i64
 }
 
 /// Get system uptime
-fn sys_system_uptime(args: &[u64]) -> i64 {
+fn sys_system_uptime(_args: &[u64]) -> i64 {
     // TODO: Get actual system uptime from boot
     0 // Uptime in milliseconds
 }
@@ -599,14 +600,14 @@ fn sys_timer_create(args: &[u64]) -> i64 {
         return SyscallResult::InvalidArgument as i64;
     }
     
-    let timeout_ms = args[0];
+    let _timeout_ms = args[0];
     
     // TODO: Create actual timer using timer driver
     1 // Mock timer handle
 }
 
 /// Get current time
-fn sys_timer_get_time(args: &[u64]) -> i64 {
+fn sys_timer_get_time(_args: &[u64]) -> i64 {
     // TODO: Get actual time from timer driver
     if let Some(_) = crate::drivers::device_manager() {
         // Mock timestamp in microseconds
@@ -624,7 +625,7 @@ fn sys_console_write(args: &[u64]) -> i64 {
     
     let buffer_ptr = args[0] as *const u8;
     let buffer_size = args[1] as usize;
-    
+
     // TODO: Validate buffer and write to console via UART driver
     // For now, try to write via debug output
     unsafe {
@@ -642,10 +643,10 @@ fn sys_console_read(args: &[u64]) -> i64 {
     if args.len() < 2 {
         return SyscallResult::InvalidArgument as i64;
     }
-    
-    let buffer_ptr = args[0] as *mut u8;
-    let buffer_size = args[1] as usize;
-    
+
+    let _buffer_ptr = args[0] as *mut u8;
+    let _buffer_size = args[1] as usize;
+
     // TODO: Read from console via UART driver
     0 // Bytes read
 }

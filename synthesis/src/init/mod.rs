@@ -470,7 +470,7 @@ fn register_default_services(init_system: &mut InitSystem) -> Result<(), &'stati
 
 /// Get the global init system
 pub fn get_init_system() -> Option<&'static mut InitSystem> {
-    unsafe { INIT_SYSTEM.as_mut() }
+    unsafe { (*core::ptr::addr_of_mut!(INIT_SYSTEM)).as_mut() }
 }
 
 /// Start the init process - begins system initialization

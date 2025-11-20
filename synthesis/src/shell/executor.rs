@@ -11,7 +11,7 @@ pub fn execute_command(shell: &mut Shell, command: &Command) -> Result<ExecResul
     if builtins::is_builtin(&command.program) {
         return builtins::execute_builtin(shell, command);
     }
-    
+
     // Try to execute as external program
     execute_external_program(shell, command)
 }
@@ -48,6 +48,7 @@ fn execute_external_program(shell: &mut Shell, command: &Command) -> Result<Exec
 }
 
 /// Find program in PATH
+#[allow(dead_code)]
 fn find_program_in_path(shell: &Shell, program: &str) -> Option<String<512>> {
     if let Some(path) = shell.get_env("PATH") {
         for path_component in path.split(':') {
@@ -67,7 +68,7 @@ fn find_program_in_path(shell: &Shell, program: &str) -> Option<String<512>> {
 // Mock implementations of common external programs
 
 /// Mock ls command
-fn execute_ls(_shell: &mut Shell, command: &Command) -> Result<ExecResult, &'static str> {
+fn execute_ls(_shell: &mut Shell, _command: &Command) -> Result<ExecResult, &'static str> {
     // TODO: List directory contents
     // For now, just return success
     Ok(ExecResult { exit_code: 0, command_found: true })
@@ -102,19 +103,19 @@ fn execute_grep(_shell: &mut Shell, command: &Command) -> Result<ExecResult, &'s
 }
 
 /// Mock wc command
-fn execute_wc(_shell: &mut Shell, command: &Command) -> Result<ExecResult, &'static str> {
+fn execute_wc(_shell: &mut Shell, _command: &Command) -> Result<ExecResult, &'static str> {
     // TODO: Count lines, words, characters
     Ok(ExecResult { exit_code: 0, command_found: true })
 }
 
 /// Mock head command
-fn execute_head(_shell: &mut Shell, command: &Command) -> Result<ExecResult, &'static str> {
+fn execute_head(_shell: &mut Shell, _command: &Command) -> Result<ExecResult, &'static str> {
     // TODO: Show first N lines of files
     Ok(ExecResult { exit_code: 0, command_found: true })
 }
 
 /// Mock tail command
-fn execute_tail(_shell: &mut Shell, command: &Command) -> Result<ExecResult, &'static str> {
+fn execute_tail(_shell: &mut Shell, _command: &Command) -> Result<ExecResult, &'static str> {
     // TODO: Show last N lines of files
     Ok(ExecResult { exit_code: 0, command_found: true })
 }
@@ -222,15 +223,15 @@ pub fn setup_io_redirection(command: &Command) -> Result<(), &'static str> {
     // 1. Opening files for stdin_file, stdout_file, stderr_file
     // 2. Redirecting process I/O to these files
     // 3. Handling append mode (>>)
-    
+
     if command.stdin_file.is_some() {
         // Redirect stdin from file
     }
-    
+
     if command.stdout_file.is_some() {
         // Redirect stdout to file
     }
-    
+
     if command.stderr_file.is_some() {
         // Redirect stderr to file
     }
@@ -245,7 +246,7 @@ pub fn execute_background(shell: &mut Shell, command: &Command) -> Result<ExecRe
     // 1. Starting command in separate task/thread
     // 2. Managing background job list
     // 3. Job control (jobs, fg, bg commands)
-    
+
     // For now, just execute normally
     execute_command(shell, command)
 }

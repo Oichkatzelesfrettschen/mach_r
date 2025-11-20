@@ -7,28 +7,35 @@ use core::ptr::{read_volatile, write_volatile};
 
 /// PL011 UART register offsets
 const UART_DR: usize = 0x00;      // Data Register
-const UART_RSR: usize = 0x04;     // Receive Status Register  
+#[allow(dead_code)]
+const UART_RSR: usize = 0x04;     // Receive Status Register
 const UART_FR: usize = 0x18;      // Flag Register
+#[allow(dead_code)]
 const UART_ILPR: usize = 0x20;    // IrDA Low-Power Counter Register
 const UART_IBRD: usize = 0x24;    // Integer Baud Rate Divisor
 const UART_FBRD: usize = 0x28;    // Fractional Baud Rate Divisor
 const UART_LCR_H: usize = 0x2C;   // Line Control Register
 const UART_CR: usize = 0x30;      // Control Register
+#[allow(dead_code)]
 const UART_IFLS: usize = 0x34;    // Interrupt FIFO Level Select Register
 const UART_IMSC: usize = 0x38;    // Interrupt Mask Set/Clear Register
+#[allow(dead_code)]
 const UART_RIS: usize = 0x3C;     // Raw Interrupt Status Register
+#[allow(dead_code)]
 const UART_MIS: usize = 0x40;     // Masked Interrupt Status Register
 const UART_ICR: usize = 0x44;     // Interrupt Clear Register
 
 /// Flag Register bits
 const FR_RXFE: u32 = 1 << 4;      // Receive FIFO Empty
 const FR_TXFF: u32 = 1 << 5;      // Transmit FIFO Full
+#[allow(dead_code)]
 const FR_RXFF: u32 = 1 << 6;      // Receive FIFO Full
 const FR_TXFE: u32 = 1 << 7;      // Transmit FIFO Empty
 const FR_BUSY: u32 = 1 << 3;      // UART Busy
 
 /// Control Register bits
 const CR_UARTEN: u32 = 1 << 0;    // UART Enable
+#[allow(dead_code)]
 const CR_LBE: u32 = 1 << 7;       // Loopback Enable
 const CR_TXE: u32 = 1 << 8;       // Transmit Enable
 const CR_RXE: u32 = 1 << 9;       // Receive Enable

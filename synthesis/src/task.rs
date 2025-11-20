@@ -78,12 +78,14 @@ pub struct Task {
     /// Task state
     state: Mutex<TaskState>,
     /// Virtual memory map
+    #[allow(dead_code)]
     vm_map: Mutex<VmMap>,
     /// Threads belonging to this task
     threads: Mutex<Vec<Thread>>,
     /// Port namespace
     ports: Mutex<PortNamespace>,
     /// Task port (for task control)
+    #[allow(dead_code)]
     task_port: Arc<Port>,
 }
 

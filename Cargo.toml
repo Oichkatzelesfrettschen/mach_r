@@ -39,4 +39,5 @@ members = [
     ".",
     "xtask",
     "tools/mig-rust",
+    "xtask/min_test_kernel",
 ]

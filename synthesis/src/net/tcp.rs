@@ -4,6 +4,7 @@
 use heapless::Vec;
 
 /// Maximum number of concurrent TCP sockets
+#[allow(dead_code)]
 const MAX_SOCKETS: usize = 16;
 /// Maximum number of network interfaces
 const MAX_IFACES: usize = 4;
@@ -109,5 +110,5 @@ pub fn init() -> Result<(), &'static str> {
 
 /// Get a reference to the global TCP stack
 pub fn get_stack() -> Option<&'static mut TcpStack> {
-    unsafe { TCP_STACK.as_mut() }
+    unsafe { (*core::ptr::addr_of_mut!(TCP_STACK)).as_mut() }
 }

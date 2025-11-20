@@ -77,7 +77,7 @@ pub fn tail(args: &[&str]) -> Result<CommandResult, &'static str> {
 /// grep - Search text patterns
 pub fn grep(args: &[&str]) -> Result<CommandResult, &'static str> {
     let (flags, params) = parse_args(args)?;
-    let case_insensitive = has_flag(&flags, "-i");
+    let _case_insensitive = has_flag(&flags, "-i");
     
     if params.is_empty() {
         return CommandResult::error(1, "grep: missing pattern");
@@ -101,8 +101,8 @@ pub fn grep(args: &[&str]) -> Result<CommandResult, &'static str> {
 /// sort - Sort lines
 pub fn sort(args: &[&str]) -> Result<CommandResult, &'static str> {
     let (flags, params) = parse_args(args)?;
-    let reverse = has_flag(&flags, "-r");
-    let numeric = has_flag(&flags, "-n");
+    let _reverse = has_flag(&flags, "-r");
+    let _numeric = has_flag(&flags, "-n");
     
     let mut result = CommandResult::success();
     
@@ -121,7 +121,7 @@ pub fn sort(args: &[&str]) -> Result<CommandResult, &'static str> {
 /// uniq - Remove duplicate lines
 pub fn uniq(args: &[&str]) -> Result<CommandResult, &'static str> {
     let (flags, params) = parse_args(args)?;
-    let count = has_flag(&flags, "-c");
+    let _count = has_flag(&flags, "-c");
     
     let mut result = CommandResult::success();
     

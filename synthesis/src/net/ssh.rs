@@ -29,6 +29,7 @@ impl Default for SshConfig {
 
 /// SSH server state
 pub struct SshServer {
+    #[allow(dead_code)]
     config: SshConfig,
     active: bool,
 }

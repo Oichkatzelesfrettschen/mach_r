@@ -177,6 +177,7 @@ impl AsyncSend {
 /// Port set for receiving from multiple ports
 pub struct PortSet {
     /// Set identifier
+    #[allow(dead_code)]
     id: PortId,
     /// Member ports
     ports: Mutex<VecDeque<Arc<Port>>>,

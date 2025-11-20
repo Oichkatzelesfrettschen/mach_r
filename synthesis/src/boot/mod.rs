@@ -1,8 +1,6 @@
 //! Pure Rust bootloader for Mach_R
 //! ARM64/AArch64 bootloader with UEFI support
 
-use core::arch::global_asm;
-
 pub mod uefi;
 pub mod multiboot;
 pub mod multiboot2;  // Multiboot2 info structure parser
@@ -175,10 +173,10 @@ pub trait BootProtocol {
     fn get_device_tree(&self) -> Result<Option<*const u8>, BootError>;
     
     /// Allocate memory for kernel
-    fn allocate_kernel_memory(&mut self, size: u64) -> Result<u64, BootError>;
+    fn allocate_kernel_memory(&mut self, _size: u64) -> Result<u64, BootError>;
     
     /// Load kernel from storage
-    fn load_kernel(&mut self, kernel_data: &[u8], load_addr: u64) -> Result<(), BootError>;
+    fn load_kernel(&mut self, _kernel_data: &[u8], _load_addr: u64) -> Result<(), BootError>;
 }
 
 /// Boot error types
@@ -245,8 +243,8 @@ pub fn boot_kernel(config: BootloaderConfig) -> ! {
             loader_name: "Mach_R Pure Rust Bootloader",
             boot_time: 0, // TODO: Get actual time
         });
-        
-        let boot_info = BOOT_INFO_STORAGE.as_ref().unwrap();
+
+        let boot_info = (*core::ptr::addr_of!(BOOT_INFO_STORAGE)).as_ref().unwrap();
         
         serial_println("Jumping to kernel...");
         
@@ -272,7 +270,7 @@ fn arch_init() {
     {
         match x86_64::init_x86_64() {
             Ok(_) => serial_println("x86_64: Initialization complete"),
-            Err(e) => {
+            Err(_e) => {
                 serial_println("x86_64: Initialization failed");
                 panic_halt();
             }
@@ -389,12 +387,14 @@ fn prepare_kernel_handoff(
     
     #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     {
+        let _ = memory_map; // Unused in generic fallback
         serial_println("Generic: Basic handoff preparation");
         (0, config.kernel_load_addr + 0x100000)
     }
 }
 
 /// Architecture-specific kernel jump
+#[allow(unused_variables)]
 fn arch_jump_to_kernel(
     kernel_entry: u64,
     stack_top: u64,
@@ -405,7 +405,7 @@ fn arch_jump_to_kernel(
     {
         trampoline::execute_trampoline(kernel_entry, stack_top, boot_info, page_table_addr);
     }
-    
+
     #[cfg(target_arch = "x86_64")]
     {
         x86_64::execute_trampoline_x86_64(kernel_entry, stack_top, boot_info);
@@ -424,7 +424,7 @@ fn arch_jump_to_kernel(
 
 /// Set up ARM64 page tables for higher half kernel
 #[cfg(target_arch = "aarch64")]
-fn setup_page_tables_arm64(memory_map: &[MemoryMapEntry], kernel_load_addr: u64) -> u64 {
+fn setup_page_tables_arm64(_memory_map: &[MemoryMapEntry], kernel_load_addr: u64) -> u64 {
     use paging::*;
     
     // Allocate root page table (this should be done with proper memory allocator)
@@ -468,14 +468,14 @@ fn setup_page_tables_arm64(memory_map: &[MemoryMapEntry], kernel_load_addr: u64)
 
 /// Set up x86_64 page tables for higher half kernel
 #[cfg(target_arch = "x86_64")]
-fn setup_page_tables_x86_64(memory_map: &[MemoryMapEntry], kernel_load_addr: u64) -> u64 {
+fn setup_page_tables_x86_64(_memory_map: &[MemoryMapEntry], kernel_load_addr: u64) -> u64 {
     use x86_64::*;
     
     // Allocate PML4 (root page table)
     static mut PML4: PageTable = PageTable::new();
     
     unsafe {
-        let pml4 = &mut PML4;
+        let pml4 = &mut *core::ptr::addr_of_mut!(PML4);
         let mut mem_manager = X86_64MemoryManager::new(pml4);
         
         // Identity map first 4GB for bootloader
@@ -510,7 +510,7 @@ fn setup_page_tables_generic(_memory_map: &[MemoryMapEntry], _kernel_load_addr: 
 }
 
 /// Initialize serial port for debug output (ARM64 PL011 UART)
-fn serial_init(port: u16) {
+fn serial_init(_port: u16) {
     unsafe {
         init_pl011_uart();
     }
@@ -526,14 +526,16 @@ pub fn serial_println(s: &str) {
 // External assembly functions
 extern "C" {
     /// Set up ARM64 page tables and enable MMU
+    #[allow(dead_code)]
     fn setup_arm64_paging(virtual_base: u64, physical_base: u64);
-    
+
     /// Initialize PL011 UART for debug output
     fn init_pl011_uart();
-    
+
     // Other externs declared here; uart_print_string is declared conditionally below
-    
+
     /// Jump to kernel entry point (defined in assembly)
+    #[allow(dead_code)]
     fn jump_to_kernel_asm(entry_point: u64, stack_pointer: u64, boot_info: u64) -> !;
 }
 
@@ -547,6 +549,7 @@ extern "C" { fn uart_print_string(s: *const u8, len: usize); }
 pub extern "C" fn uart_print_string(_s: *const u8, _len: usize) { }
 
 /// Jump to kernel entry point
+#[allow(dead_code)]
 unsafe fn jump_to_kernel(entry_point: u64, stack_pointer: u64, boot_info: u64) -> ! {
     jump_to_kernel_asm(entry_point, stack_pointer, boot_info)
 }
@@ -559,7 +562,7 @@ fn panic_halt() -> ! {
 }
 
 /// UEFI boot main function called from UEFI protocol
-pub fn boot_main(image_handle: usize, system_table: usize) -> ! {
+pub fn boot_main(_image_handle: usize, _system_table: usize) -> ! {
     let config = BootloaderConfig::default();
     boot_kernel(config)
 }

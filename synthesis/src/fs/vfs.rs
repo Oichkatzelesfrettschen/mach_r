@@ -33,7 +33,7 @@ pub enum OpenMode {
 /// VFS operations trait
 pub trait VfsOperations {
     /// Open a file
-    fn open(&mut self, path: &str, mode: OpenMode) -> Result<FileHandle, &'static str>;
+    fn open(&mut self, path: &str, _mode: OpenMode) -> Result<FileHandle, &'static str>;
     
     /// Close a file
     fn close(&mut self, handle: FileHandle) -> Result<(), &'static str>;
@@ -70,6 +70,7 @@ pub trait VfsOperations {
 #[derive(Debug)]
 struct MountEntry {
     path: String<256>,
+    #[allow(dead_code)]
     fs_type: FilesystemType,
     // TODO: Add filesystem-specific data
 }
@@ -136,7 +137,7 @@ impl Vfs {
 }
 
 impl VfsOperations for Vfs {
-    fn open(&mut self, path: &str, mode: OpenMode) -> Result<FileHandle, &'static str> {
+    fn open(&mut self, path: &str, _mode: OpenMode) -> Result<FileHandle, &'static str> {
         if !self.initialized {
             return Err("VFS not initialized");
         }
@@ -231,5 +232,5 @@ pub fn init() -> Result<(), &'static str> {
 
 /// Get the global VFS instance
 pub fn get_vfs() -> Option<&'static mut Vfs> {
-    unsafe { VFS.as_mut() }
+    unsafe { (*core::ptr::addr_of_mut!(VFS)).as_mut() }
 }

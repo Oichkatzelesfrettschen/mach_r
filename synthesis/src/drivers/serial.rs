@@ -124,6 +124,7 @@ pub mod uart16550 {
     const UART_LCR: u16 = 3;     // Line control
     const UART_MCR: u16 = 4;     // Modem control
     const UART_LSR: u16 = 5;     // Line status
+    #[allow(dead_code)]
     const UART_MSR: u16 = 6;     // Modem status
     const UART_DLL: u16 = 0;     // Divisor latch low (when DLAB=1)
     const UART_DLH: u16 = 1;     // Divisor latch high (when DLAB=1)

@@ -280,11 +280,16 @@ pub fn syscall_handler(ctx: &InterruptContext) {
 
 /// Programmable Interrupt Controller (PIC) commands
 mod pic {
+    #[allow(dead_code)]
     pub const PIC1_COMMAND: u16 = 0x20;
+    #[allow(dead_code)]
     pub const PIC1_DATA: u16 = 0x21;
+    #[allow(dead_code)]
     pub const PIC2_COMMAND: u16 = 0xA0;
+    #[allow(dead_code)]
     pub const PIC2_DATA: u16 = 0xA1;
-    
+
+    #[allow(dead_code)]
     pub const PIC_EOI: u8 = 0x20;
 }
 
@@ -347,12 +352,9 @@ pub unsafe fn disable_interrupts() {
 
 /// Check if interrupts are enabled
 pub fn interrupts_enabled() -> bool {
-    let flags: u64;
-    unsafe {
-        // In real implementation:
-        // asm!("pushfq; pop {}", out(reg) flags);
-        flags = 0x200; // IF flag set
-    }
+    let flags: u64 = 0x200; // IF flag set
+    // In real implementation:
+    // unsafe { asm!("pushfq; pop {}", out(reg) flags); }
     (flags & 0x200) != 0
 }
 

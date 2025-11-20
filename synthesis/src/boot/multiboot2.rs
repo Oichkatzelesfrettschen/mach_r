@@ -4,7 +4,6 @@
 //! This module provides type-safe parsing of the Multiboot2 information
 //! structure passed by the bootloader.
 
-use core::fmt;
 use core::slice;
 use core::str;
 
@@ -325,13 +324,11 @@ impl Multiboot2InfoParser {
 
     /// Iterate over all tags
     pub fn tags(&self) -> TagIter {
-        unsafe {
-            let start = self.info_addr + 8; // Skip total_size and reserved
-            let end = self.info_addr + self.total_size() as u64;
-            TagIter {
-                current: start,
-                end,
-            }
+        let start = self.info_addr + 8; // Skip total_size and reserved
+        let end = self.info_addr + self.total_size() as u64;
+        TagIter {
+            current: start,
+            end,
         }
     }
 

@@ -8,11 +8,12 @@ rustflags = [
     "-C", "link-arg=-T/Users/eirikr/1_Workspace/Synthesis/linker-x86_64.ld",
     "-C", "link-arg=--nmagic",
     "-C", "relocation-model=static",
+    "-D", "warnings",
 ]
 
 [target.aarch64-unknown-none]
 rustflags = [
-    "-C", "link-arg=-T linker-aarch64.ld",
+    "-C", "link-arg=-T/Users/eirikr/1_Workspace/Synthesis/aarch64-qemu.ld",
     "-C", "link-arg=-nostartfiles",
     "-C", "link-arg=--nmagic",
     "-C", "relocation-model=static",

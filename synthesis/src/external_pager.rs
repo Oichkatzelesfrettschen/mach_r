@@ -25,14 +25,18 @@ pub struct MemoryObject {
     /// Pager port for this object
     pager_port: Option<Arc<Port>>,
     /// Control port for this object
+    #[allow(dead_code)]
     control_port: Option<Arc<Port>>,
     /// Shadow object for copy-on-write
+    #[allow(dead_code)]
     shadow: Option<Arc<MemoryObject>>,
     /// Reference count
     refs: AtomicUsize,
     /// Is this object temporary?
+    #[allow(dead_code)]
     temporary: bool,
     /// Can this object be copied?
+    #[allow(dead_code)]
     can_copy: bool,
 }
 
@@ -170,10 +174,12 @@ pub struct ExternalPager {
     /// Pager port for receiving requests
     port: Arc<Port>,
     /// Task that runs the pager
+    #[allow(dead_code)]
     task: TaskId,
     /// Memory objects managed by this pager
     objects: Mutex<Vec<Arc<MemoryObject>>>,
     /// Is pager active?
+    #[allow(dead_code)]
     active: AtomicBool,
 }
 
@@ -246,7 +252,7 @@ impl ExternalPager {
     }
     
     /// Parse a page reply message
-    fn parse_page_reply(&self, msg: Message) -> Result<PhysicalAddress, PagerError> {
+    fn parse_page_reply(&self, _msg: Message) -> Result<PhysicalAddress, PagerError> {
         // In real implementation, would extract physical address from message
         // For now, return a dummy address
         Ok(PhysicalAddress::new(0x10000))
@@ -365,7 +371,7 @@ impl VmMapEntry {
         
         // Calculate offset into memory object
         let region_offset = addr.0 - self.start.0;
-        let object_offset = self.offset + region_offset;
+        let _object_offset = self.offset + region_offset;
         
         // Request page from memory object's pager
         // In real implementation, would go through the pager
@@ -386,8 +392,10 @@ impl VmMapEntry {
 /// VM map - manages address space for a task
 pub struct VmMap {
     /// Map entries
+    #[allow(dead_code)]
     entries: Mutex<Vec<VmMapEntry>>,
     /// Minimum address
+    #[allow(dead_code)]
     min_address: VirtualAddress,
     /// Maximum address
     max_address: VirtualAddress,

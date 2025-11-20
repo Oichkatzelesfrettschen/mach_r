@@ -62,6 +62,7 @@ pub struct FileServer {
     /// Server port for receiving requests
     server_port: PortId,
     /// Server task ID
+    #[allow(dead_code)]
     server_task: TaskId,
     /// Open file descriptors
     file_descriptors: Mutex<BTreeMap<i32, FileDescriptor>>,

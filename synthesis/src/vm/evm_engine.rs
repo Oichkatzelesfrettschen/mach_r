@@ -87,10 +87,13 @@ pub struct SimpleEvmBackend {
     /// Account storage
     accounts: Vec<([u8; 20], Account), 32>,
     /// Block number
+    #[allow(dead_code)]
     block_number: u64,
     /// Block timestamp
+    #[allow(dead_code)]
     block_timestamp: u64,
     /// Chain ID
+    #[allow(dead_code)]
     chain_id: u64,
 }
 
@@ -244,7 +247,7 @@ pub fn init() -> Result<(), &'static str> {
 /// Execute EVM bytecode
 pub fn execute(code: &[u8], data: &[u8]) -> Result<VmResult, &'static str> {
     unsafe {
-        match EVM_ENGINE.as_mut() {
+        match (*core::ptr::addr_of_mut!(EVM_ENGINE)).as_mut() {
             Some(engine) => engine.execute_bytecode(code, data),
             None => Err("EVM engine not initialized"),
         }
@@ -253,5 +256,5 @@ pub fn execute(code: &[u8], data: &[u8]) -> Result<VmResult, &'static str> {
 
 /// Get the global EVM engine
 pub fn get_engine() -> Option<&'static mut EvmEngine> {
-    unsafe { EVM_ENGINE.as_mut() }
+    unsafe { (*core::ptr::addr_of_mut!(EVM_ENGINE)).as_mut() }
 }

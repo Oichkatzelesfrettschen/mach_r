@@ -205,18 +205,19 @@ impl BootProtocol for Multiboot2Protocol {
         Ok(None)
     }
     
-    fn allocate_kernel_memory(&mut self, size: u64) -> Result<u64, BootError> {
+    fn allocate_kernel_memory(&mut self, _size: u64) -> Result<u64, BootError> {
         // Memory allocation not available in multiboot2
         Err(BootError::OutOfMemory)
     }
     
-    fn load_kernel(&mut self, kernel_data: &[u8], load_addr: u64) -> Result<(), BootError> {
+    fn load_kernel(&mut self, _kernel_data: &[u8], _load_addr: u64) -> Result<(), BootError> {
         // Kernel loading handled by multiboot2 bootloader
         Ok(())
     }
 }
 
 /// Convert multiboot2 memory type to our memory type
+#[allow(dead_code)]
 fn convert_multiboot_memory_type(mb_type: u32) -> MemoryType {
     match mb_type {
         1 => MemoryType::Available,        // Available

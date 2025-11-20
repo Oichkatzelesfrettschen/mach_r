@@ -9,8 +9,10 @@ pub mod system_info;
 pub mod process_ops;
 
 /// Maximum command line argument length
+#[allow(dead_code)]
 const MAX_ARG_LEN: usize = 256;
 /// Maximum number of arguments
+#[allow(dead_code)]
 const MAX_ARGS: usize = 64;
 /// Maximum output buffer size
 const MAX_OUTPUT: usize = 4096;

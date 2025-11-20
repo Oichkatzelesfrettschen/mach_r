@@ -9,6 +9,7 @@ use alloc::sync::Arc;
 
 pub struct PagerServer {
     port: Arc<Port>,
+    #[allow(dead_code)]
     server_task: TaskId,
 }
 

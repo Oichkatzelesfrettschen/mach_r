@@ -107,8 +107,9 @@ pub struct Port {
     
     /// Message queue
     messages: MessageQueue,
-    
+
     /// Sequence number for message ordering
+    #[allow(dead_code)]
     sequence: AtomicU64,
     
     /// No-senders notification port

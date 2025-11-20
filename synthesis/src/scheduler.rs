@@ -96,6 +96,7 @@ impl RunQueue {
     }
     
     /// Check if empty
+    #[allow(dead_code)]
     fn is_empty(&self) -> bool {
         self.threads.is_empty()
     }

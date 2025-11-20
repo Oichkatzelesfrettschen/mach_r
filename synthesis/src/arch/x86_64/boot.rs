@@ -2,90 +2,24 @@
 
 use core::arch::asm;
 
-/// Multiboot2 magic number
-const MULTIBOOT2_MAGIC: u32 = 0xe85250d6;
-const MULTIBOOT_ARCHITECTURE_I386: u32 = 0;
-
-/// Multiboot2 header
-#[repr(C, align(8))]
-struct Multiboot2Header {
-    magic: u32,
-    architecture: u32,
-    header_length: u32,
-    checksum: u32,
-    // End tag
-    end_tag_type: u16,
-    end_tag_flags: u16,
-    end_tag_size: u32,
-}
-
-/// Multiboot2 header placed in .multiboot section
-#[used]
-#[link_section = ".multiboot"]
-static MULTIBOOT_HEADER: Multiboot2Header = {
-    const HEADER_LENGTH: u32 = core::mem::size_of::<Multiboot2Header>() as u32;
-    Multiboot2Header {
-        magic: MULTIBOOT2_MAGIC,
-        architecture: MULTIBOOT_ARCHITECTURE_I386,
-        header_length: HEADER_LENGTH,
-        checksum: 0u32.wrapping_sub(MULTIBOOT2_MAGIC)
-            .wrapping_sub(MULTIBOOT_ARCHITECTURE_I386)
-            .wrapping_sub(HEADER_LENGTH),
-        end_tag_type: 0,
-        end_tag_flags: 0,
-        end_tag_size: 8,
-    }
-};
+// NOTE: Multiboot2 header is now in boot32.asm, not here
+// The assembly boot stub handles Multiboot2 protocol and transitions to 64-bit mode
 
 /// Boot stack size (64 KB)
 const STACK_SIZE: usize = 64 * 1024;
 
-/// Boot stack
+/// Boot stack (currently unused - boot32.asm manages stack)
 #[repr(align(16))]
+#[allow(dead_code)]
 struct Stack([u8; STACK_SIZE]);
 
 #[used]
 #[link_section = ".bss"]
 static mut BOOT_STACK: Stack = Stack([0; STACK_SIZE]);
 
-/// Entry point called by bootloader
+/// Kernel main function - called by boot32.asm after 64-bit transition
 ///
-/// On entry, registers contain:
-/// - EAX/RAX: Multiboot2 magic number (0x36d76289)
-/// - EBX/RBX: Physical address of Multiboot2 info structure
-#[no_mangle]
-pub extern "C" fn _start() -> ! {
-    // Capture multiboot parameters before setting up stack
-    let (magic, multiboot_info): (u64, u64);
-    unsafe {
-        asm!(
-            "mov {0}, rax",
-            "mov {1}, rbx",
-            out(reg) magic,
-            out(reg) multiboot_info,
-            options(nomem, nostack, preserves_flags)
-        );
-
-        // Set up stack pointer
-        let stack_top = BOOT_STACK.0.as_ptr().add(STACK_SIZE) as u64;
-        asm!(
-            "mov rsp, {}",
-            "mov rbp, {}",
-            in(reg) stack_top,
-            in(reg) stack_top,
-        );
-
-        // Clear direction flag (required by System V ABI)
-        asm!("cld");
-
-        // Call kernel main with multiboot parameters
-        kmain(magic, multiboot_info);
-    }
-}
-
-/// Kernel main function
-///
-/// Called by _start with:
+/// On entry (from boot32.asm), parameters are:
 /// - magic: Multiboot2 magic number (should be 0x36d76289)
 /// - multiboot_info: Physical address of Multiboot2 info structure
 #[no_mangle]
@@ -109,11 +43,11 @@ pub extern "C" fn kmain(magic: u64, multiboot_info: u64) -> ! {
     // Display boot entry information
     crate::vga_println!("");
     crate::vga_println!("Boot Information:");
-    crate::vga_println!("  Entry:    _start");
+    crate::vga_println!("  Entry:    _start (boot32.asm)");
     crate::vga_println!("  Magic:    0x{:08x}", magic as u32);
     crate::vga_println!("  MB2 Info: 0x{:016x}", multiboot_info);
 
-    crate::serial_println!("Mach_R: Kernel entry at _start");
+    crate::serial_println!("Mach_R: Kernel entry via boot32.asm");
     crate::serial_println!("Mach_R: Magic number: 0x{:08x}", magic as u32);
     crate::serial_println!("Mach_R: Multiboot2 info at: 0x{:016x}", multiboot_info);
 
@@ -141,7 +75,7 @@ pub extern "C" fn kmain(magic: u64, multiboot_info: u64) -> ! {
                 crate::vga_println!("[ERROR] Invalid Multiboot2 info pointer!");
                 crate::serial_println!("Mach_R: ERROR - Invalid Multiboot2 info structure");
                 loop {
-                    unsafe { asm!("hlt"); }
+                    asm!("hlt");
                 }
             }
         }

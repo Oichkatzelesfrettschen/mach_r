@@ -185,9 +185,12 @@ pub enum DeviceState {
 
 /// Enhanced device manager
 pub struct EnhancedDeviceManager {
+    #[allow(dead_code)]
     devices: HeaplessVec<DeviceInfo, 128>,
+    #[allow(dead_code)]
     device_index: FnvIndexMap<DeviceId, usize, 128>,
     enhanced_drivers: HeaplessVec<Box<dyn DeviceDriver>, 64>,
+    #[allow(dead_code)]
     next_device_id: u64,
 }
 
@@ -211,18 +214,18 @@ static mut ENHANCED_DEVICE_MANAGER: Option<EnhancedDeviceManager> = None;
 
 /// Get enhanced device manager
 pub fn device_manager() -> Option<&'static EnhancedDeviceManager> {
-    unsafe { ENHANCED_DEVICE_MANAGER.as_ref() }
+    unsafe { (*core::ptr::addr_of!(ENHANCED_DEVICE_MANAGER)).as_ref() }
 }
 
 /// Get mutable enhanced device manager
 pub fn device_manager_mut() -> Option<&'static mut EnhancedDeviceManager> {
-    unsafe { ENHANCED_DEVICE_MANAGER.as_mut() }
+    unsafe { (*core::ptr::addr_of_mut!(ENHANCED_DEVICE_MANAGER)).as_mut() }
 }
 
 /// Initialize enhanced device manager
 pub fn init_enhanced_device_manager() -> Result<(), DriverError> {
     unsafe {
-        if ENHANCED_DEVICE_MANAGER.is_some() {
+        if (*core::ptr::addr_of!(ENHANCED_DEVICE_MANAGER)).is_some() {
             return Ok(());
         }
         

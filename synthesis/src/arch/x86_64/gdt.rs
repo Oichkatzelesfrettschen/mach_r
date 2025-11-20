@@ -48,6 +48,7 @@ struct GdtPointer {
 /// Global Descriptor Table
 #[repr(align(16))]
 struct Gdt {
+    #[allow(dead_code)]
     entries: [GdtEntry; 5],
 }
 
@@ -71,7 +72,7 @@ pub fn init() {
     unsafe {
         let gdt_ptr = GdtPointer {
             limit: (core::mem::size_of::<Gdt>() - 1) as u16,
-            base: &GDT as *const _ as u64,
+            base: &raw const GDT as *const _ as u64,
         };
 
         // Load GDT

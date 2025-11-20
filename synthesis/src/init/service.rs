@@ -287,7 +287,7 @@ impl ServiceTemplates {
     }
     
     /// Create a network service template
-    pub fn network_service(name: &str, command: &str, port: u16) -> Result<ServiceConfig, &'static str> {
+    pub fn network_service(name: &str, command: &str, _port: u16) -> Result<ServiceConfig, &'static str> {
         let mut config = ServiceConfig::new(name)?;
         config.set_exec_start(command)?;
         config.service_type = ServiceType::Simple;

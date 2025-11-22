@@ -14,8 +14,8 @@ path = "src/lib.rs"
 
 [dependencies]
 # Core no_std dependencies for embedded development
-spin = "0.9"
-heapless = "0.8"
+spin = { version = "0.9", default-features = false, features = ["once", "mutex", "spin_mutex"] }
+heapless = { version = "0.8", default-features = false }
 
 [dev-dependencies]
 # For testing in std environment
@@ -39,5 +39,4 @@ members = [
     ".",
     "xtask",
     "tools/mig-rust",
-    "xtask/min_test_kernel",
 ]

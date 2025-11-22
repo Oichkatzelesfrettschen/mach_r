@@ -232,3 +232,47 @@ pub fn current_timestamp() -> u64 {
         0 // Default timestamp
     }
 }
+
+/// Wait for interrupt (architecture-specific)
+pub fn wait_for_interrupt() {
+    #[cfg(target_arch = "aarch64")]
+    {
+        unsafe { core::arch::asm!("wfi") };
+    }
+    
+    #[cfg(target_arch = "x86_64")]
+    {
+        unsafe { core::arch::asm!("hlt") };
+    }
+    
+    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+    {
+        // Default: spin loop for unsupported architectures
+        loop { core::hint::spin_loop(); }
+    }
+}
+
+/// Halt the processor (architecture-specific)
+pub fn halt() -> ! {
+    #[cfg(target_arch = "aarch64")]
+    {
+        loop {
+            unsafe { core::arch::asm!("wfi") };
+        }
+    }
+    
+    #[cfg(target_arch = "x86_64")]
+    {
+        loop {
+            unsafe {
+                core::arch::asm!("hlt");
+            }
+        }
+    }
+    
+    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+    {
+        // Default: spin loop for unsupported architectures
+        loop { core::hint::spin_loop(); }
+    }
+}

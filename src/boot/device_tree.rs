@@ -74,7 +74,7 @@ impl DeviceTreeParser {
     }
     
     /// Find a property in the device tree
-    pub fn find_property(&self, path: &str, prop_name: &str) -> Option<DeviceTreeProperty> {
+    pub fn find_property(&self, _path: &str, _prop_name: &str) -> Option<DeviceTreeProperty> {
         // TODO: Implement device tree traversal
         // This would walk the structure block looking for nodes and properties
         None

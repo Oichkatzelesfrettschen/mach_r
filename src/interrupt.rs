@@ -246,11 +246,11 @@ pub fn page_fault_handler(ctx: &InterruptContext) {
 /// Timer interrupt handler
 pub fn timer_handler(_ctx: &InterruptContext) {
     // Increment system tick
-    crate::task::scheduler::tick();
+    crate::scheduler::global_scheduler().tick();
     
     // Trigger scheduler if needed
-    if crate::task::scheduler::should_reschedule() {
-        crate::task::scheduler::schedule();
+    if crate::scheduler::global_scheduler().should_reschedule() {
+        crate::scheduler::global_scheduler().schedule();
     }
 }
 

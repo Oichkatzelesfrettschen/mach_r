@@ -233,17 +233,21 @@ fn sys_port_allocate(args: &[u64]) -> i64 {
     };
     
     // Allocate port
-    let port = task.allocate_port();
+    let port_name = task.allocate_port();
     
     // Add appropriate rights
-    match right_type {
-        1 => port.add_send_right(),
-        2 => {}, // Receive right is implicit
+    let add_right_result = match right_type {
+        1 => crate::ipc::port::add_send_right(port_name), // Call the global add_send_right
+        2 => Ok(()), // Receive right is implicit
         _ => return SyscallResult::InvalidArgument as i64,
+    };
+
+    if let Err(_) = add_right_result {
+        return SyscallResult::InvalidPort as i64; // Or appropriate error
     }
     
     // Return port ID (in real implementation, would return port name)
-    port.id().0 as i64
+    port_name.id() as i64
 }
 
 /// Deallocate a port
@@ -322,7 +326,7 @@ fn sys_task_create(args: &[u64]) -> i64 {
     
     // Create new task
     let task_manager = crate::task::manager();
-    let new_task = task_manager.create_task();
+    let new_task = task_manager.create_task(alloc::string::String::from("user_task")); // Placeholder name
     
     // Return task ID
     new_task.id().0 as i64
@@ -359,7 +363,7 @@ fn sys_thread_create(args: &[u64]) -> i64 {
     let task_manager = crate::task::manager();
     match task_manager.get_task(task_id) {
         Some(task) => {
-            let thread_id = task.create_thread();
+            let thread_id = task.create_thread(0, 0x1000, alloc::string::String::from("user_thread")); // Placeholder args
             thread_id.0 as i64
         }
         None => SyscallResult::InvalidTask as i64,

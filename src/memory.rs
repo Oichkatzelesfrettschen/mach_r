@@ -186,6 +186,38 @@ pub fn page_manager() -> &'static PageManager {
 // Re-export types for convenience
 pub use crate::paging::{VirtualAddress, PhysicalAddress};
 
+/// Allocate a stack of given size
+pub fn alloc_stack(size: usize) -> usize {
+    // Align to page boundary
+    let size = (size + crate::paging::PAGE_SIZE - 1) & !(crate::paging::PAGE_SIZE - 1);
+    
+    // Allocate physical pages
+    let mut addr = 0;
+    for _ in 0..(size / crate::paging::PAGE_SIZE) {
+        if let Ok(page) = page_manager().allocate_page() {
+            if addr == 0 {
+                addr = page.0;
+            }
+        } else {
+            panic!("Out of memory allocating stack");
+        }
+    }
+    
+    addr + size  // Return top of stack (grows down)
+}
+
+/// Free a stack
+pub fn free_stack(stack_top: usize, size: usize) {
+    // Align to page boundary
+    let size = (size + crate::paging::PAGE_SIZE - 1) & !(crate::paging::PAGE_SIZE - 1);
+    let start_addr = stack_top - size;
+
+    for i in 0..(size / crate::paging::PAGE_SIZE) {
+        page_manager().deallocate_page(crate::paging::PhysicalAddress(start_addr + i * crate::paging::PAGE_SIZE));
+    }
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -7,11 +7,14 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use spin::Mutex;
+use spin::Once;
+
 use crate::types::{TaskId, ThreadId};
-use crate::task::ThreadState;
+use crate::task::{ThreadState, Context}; // Add Context here
+
 
 /// Number of priority levels
-pub const PRIORITY_LEVELS: usize = 32;
+pub const PRIORITY_LEVELS: usize = 128;
 
 /// Default priority
 pub const DEFAULT_PRIORITY: usize = 16;
@@ -44,6 +47,8 @@ pub struct SchedThread {
     pub state: Mutex<ThreadState>,
     /// CPU affinity mask
     pub affinity: AtomicUsize,
+    /// CPU context for thread switching
+    pub context: Mutex<Context>,
 }
 
 impl SchedThread {
@@ -56,6 +61,7 @@ impl SchedThread {
             quantum: AtomicU64::new(TIME_QUANTUM_MS),
             state: Mutex::new(ThreadState::Ready),
             affinity: AtomicUsize::new(usize::MAX), // All CPUs
+            context: Mutex::new(Context::new()),
         })
     }
     
@@ -170,9 +176,24 @@ impl Scheduler {
     }
     
     /// Unblock a thread
-    pub fn unblock(&self, thread: Arc<SchedThread>) {
-        *thread.state.lock() = ThreadState::Ready;
-        self.add_thread(thread);
+    pub fn unblock(&self, thread_id: ThreadId) {
+        let mut queues = self.run_queues.lock();
+        // Find the thread in any queue or current, change its state and re-add it.
+        // This is a simplified approach, a more robust solution would involve a global thread table.
+        for queue in queues.iter_mut() {
+            if let Some(pos) = queue.threads.iter().position(|t| t.thread_id == thread_id) {
+                let thread = queue.threads.remove(pos).unwrap();
+                *thread.state.lock() = ThreadState::Ready;
+                queue.threads.push_back(thread); // Re-add to the end of its priority queue
+                return;
+            }
+        }
+        // If the thread is the current running one, unblock it.
+        if let Some(ref current) = *self.current.lock() {
+            if current.thread_id == thread_id {
+                *current.state.lock() = ThreadState::Ready;
+            }
+        }
     }
     
     /// Yield current thread
@@ -192,15 +213,19 @@ impl Scheduler {
         
         // Save current thread if still ready
         if let Some(ref current) = *current_lock {
-            if *current.state.lock() == ThreadState::Ready {
-                // Put back in queue if quantum not expired
-                if current.quantum.load(Ordering::Relaxed) > 0 {
-                    // Keep running
+            // If current is running and its quantum expired, put it back in queue
+            if *current.state.lock() == ThreadState::Running {
+                if current.quantum.load(Ordering::Relaxed) == 0 {
+                    current.reset_quantum();
+                    *current.state.lock() = ThreadState::Ready;
+                    queues[current.priority].push(current.clone());
+                } else {
+                    // Quantum not expired, keep running
                     return;
                 }
-                // Quantum expired, put back in queue
-                current.reset_quantum();
-                queues[current.priority].push(current.clone());
+            } else if *current.state.lock() == ThreadState::Ready {
+                 // Current thread is ready, put it back in queue (e.g., if yielded)
+                 queues[current.priority].push(current.clone());
             }
         }
         
@@ -208,14 +233,17 @@ impl Scheduler {
         let next = queues.iter_mut()
             .rev() // Start from highest priority
             .find_map(|queue| queue.pop())
-            .or_else(|| self.idle_thread.clone());
+            .or_else(|| self.idle_thread.clone()); // Fallback to idle thread
         
         if let Some(next_thread) = next {
-            // Perform context switch
+            // Perform context switch if different thread
             if let Some(ref current) = *current_lock {
                 if current.thread_id != next_thread.thread_id {
-                    self.context_switch(current, &next_thread);
+                    *next_thread.state.lock() = ThreadState::Running; // Next becomes Running
+                    self.context_switch(current, &next_thread); // Perform actual context switch
                 }
+            } else { // No current thread (e.g., initial boot)
+                *next_thread.state.lock() = ThreadState::Running;
             }
             
             *current_lock = Some(next_thread);
@@ -224,16 +252,80 @@ impl Scheduler {
         
         self.need_resched.store(false, Ordering::Release);
     }
-    
+
+
+
     /// Perform context switch
-    fn context_switch(&self, _from: &SchedThread, _to: &SchedThread) {
-        // In real implementation:
-        // 1. Save current thread's registers
-        // 2. Switch page tables if different task
-        // 3. Load new thread's registers
-        // 4. Return to new thread's execution
-        
-        // This would involve assembly code
+    #[cfg(target_arch = "aarch64")]
+    unsafe fn context_switch(&self, from: &Arc<SchedThread>, to: &Arc<SchedThread>) {
+        // Need to get the actual Context pointers from the SchedThread's Mutex<Context>
+        // and safely dereference them.
+        let from_ctx_ptr: *mut Context = &mut *from.context.lock();
+        let to_ctx_ptr: *mut Context = &mut *to.context.lock();
+
+        asm!(
+            "
+            // Save current context (from->context)
+            stp x0, x1, [x8, #0]
+            stp x2, x3, [x8, #16]
+            stp x4, x5, [x8, #32]
+            stp x6, x7, [x8, #48]
+            stp x8, x9, [x8, #64]
+            stp x10, x11, [x8, #80]
+            stp x12, x13, [x8, #96]
+            stp x14, x15, [x8, #112]
+            stp x16, x17, [x8, #128]
+            stp x18, x19, [x8, #144]
+            stp x20, x21, [x8, #160]
+            stp x22, x23, [x8, #176]
+            stp x24, x25, [x8, #192]
+            stp x26, x27, [x8, #208]
+            stp x28, x29, [x8, #224]
+            str x30, [x8, #240]
+            mrs x1, sp_el0
+            str x1, [x8, #248] // Save SP
+            adr x1, .
+            str x1, [x8, #256] // Save PC (address of next instruction)
+            mrs x1, spsr_el1
+            str x1, [x8, #264] // Save PSTATE
+
+            // Load new context (to->context)
+            ldp x0, x1, [x9, #0]
+            ldp x2, x3, [x9, #16]
+            ldp x4, x5, [x9, #32]
+            ldp x6, x7, [x9, #48]
+            ldp x8, x9, [x9, #64]
+            ldp x10, x11, [x9, #80]
+            ldp x12, x13, [x9, #96]
+            ldp x14, x15, [x9, #112]
+            ldp x16, x17, [x9, #128]
+            ldp x18, x19, [x9, #144]
+            ldp x20, x21, [x9, #160]
+            ldp x22, x23, [x9, #176]
+            ldp x24, x25, [x9, #192]
+            ldp x26, x27, [x9, #208]
+            ldp x28, x29, [x9, #224]
+            ldr x30, [x9, #240]
+            
+            ldr x0, [x9, #248]
+            msr sp_el0, x0 // Load SP
+            ldr x0, [x9, #264]
+            msr spsr_el1, x0 // Load PSTATE
+            ldr x0, [x9, #256] // Load PC
+
+            // Jump to new PC
+            br x0
+            /* {x8} {x9} */ // Mark as used
+            ",
+            x8 = in(reg) from_ctx_ptr,
+            x9 = in(reg) to_ctx_ptr,
+            options(noreturn)
+        );
+    }
+
+    #[cfg(not(target_arch = "aarch64"))]
+    fn context_switch(&self, _from: &Arc<SchedThread>, _to: &Arc<SchedThread>) {
+        // Stub for other architectures
     }
     
     /// Timer tick handler
@@ -267,62 +359,131 @@ impl Scheduler {
     pub fn stats(&self) -> &SchedStats {
         &self.stats
     }
-}
 
-/// Global scheduler instance (simplified for now)
-static mut SCHEDULER_INITIALIZED: bool = false;
+    /// Suspend a thread
+    pub fn suspend_thread(&self, thread_id: ThreadId) {
+        // TODO: Implement suspending a thread.
+        let _ = thread_id; // Suppress unused warning
+        todo!();
+    }
 
-/// Initialize the scheduler
-pub fn init() {
-    unsafe {
-        SCHEDULER_INITIALIZED = true;
+    /// Resume a thread
+    pub fn resume_thread(&self, thread_id: ThreadId) {
+        // TODO: Implement resuming a thread.
+        let _ = thread_id; // Suppress unused warning
+        todo!();
+    }
+
+    /// Terminate a thread
+    pub fn terminate_thread(&self, thread_id: ThreadId) {
+        // TODO: Implement terminating a thread.
+        let _ = thread_id; // Suppress unused warning
+        todo!();
     }
 }
 
-/// Add thread to scheduler
-pub fn add_thread(_thread: Arc<SchedThread>) {
-    // Simplified for compilation
+
+
+// ... (rest of the file until the global functions) ...
+
+/// Global scheduler instance
+static SCHEDULER: Once<Scheduler> = Once::new();
+
+/// Initialize the scheduler
+pub fn init(idle_thread_entry: unsafe extern "C" fn() -> !) {
+    SCHEDULER.call_once(|| {
+        let mut scheduler = Scheduler::new();
+
+        // Create idle thread SchedThread
+        let idle_thread_arc = Arc::new(SchedThread {
+            thread_id: ThreadId(0), // Special ID for idle thread
+            task_id: TaskId(0), // Idle thread belongs to kernel task
+            priority: 0, // Lowest priority
+            quantum: AtomicU64::new(TIME_QUANTUM_MS),
+            state: Mutex::new(ThreadState::Ready),
+            affinity: AtomicUsize::new(usize::MAX),
+            context: Mutex::new({
+                let mut ctx = Context::new();
+                ctx.pc = idle_thread_entry as usize as u64; // Set PC to idle_thread_entry
+                // Stack will be set up by alloc_stack and passed during creation of the SchedThread
+                // This is a placeholder for now, actual stack setup happens elsewhere for SchedThread
+                ctx
+            }),
+        });
+
+        scheduler.init(idle_thread_arc); // Pass the Arc clone
+        scheduler
+    });
 }
 
-/// Remove thread from scheduler
-pub fn remove_thread(_thread_id: ThreadId) {
-    // Simplified for compilation
+/// Get the global scheduler instance
+pub fn global_scheduler() -> &'static Scheduler {
+    SCHEDULER.get().expect("Scheduler not initialized")
 }
 
-/// Schedule next thread
+/// Idle thread function
+pub extern "C" fn idle_thread_entry() -> ! {
+    loop {
+        // Here we would perform low-power operations or simply wait for interrupts
+        // using WFI/WFE (Wait For Interrupt/Event) instructions.
+        unsafe {
+            core::arch::asm!("wfi");
+        }
+    }
+}
+
+// Public scheduler interface functions (adapted from real_os/kernel/src/scheduler)
+
+pub fn add_thread(thread: Arc<SchedThread>) {
+    global_scheduler().add_thread(thread);
+}
+
+pub fn remove_thread(thread_id: ThreadId) {
+    global_scheduler().remove_thread(thread_id);
+}
+
 pub fn schedule() {
-    // Simplified for compilation
+    global_scheduler().schedule();
 }
 
-/// Timer tick
-pub fn tick() {
-    // Poll servers (name, vm, pager) once per tick to service IPC
-    crate::servers::poll_once();
+pub fn timer_tick() {
+    global_scheduler().tick();
 }
 
-/// Check if should reschedule
 pub fn should_reschedule() -> bool {
-    false // Simplified for compilation
+    global_scheduler().should_reschedule()
 }
 
-/// Yield CPU
 pub fn yield_cpu() {
-    // Simplified for compilation
+    global_scheduler().yield_current();
 }
 
-/// Block current thread
-pub fn block() {
-    // Simplified for compilation
+pub fn block_current() {
+    global_scheduler().block_current();
 }
 
-/// Unblock thread
-pub fn unblock(_thread: Arc<SchedThread>) {
-    // Simplified for compilation
+pub fn unblock_thread(thread_id: ThreadId) {
+    global_scheduler().unblock(thread_id);
 }
 
-/// Get current thread
+pub fn wake_thread(thread_id: ThreadId) {
+    global_scheduler().unblock(thread_id);
+}
+
 pub fn current_thread() -> Option<Arc<SchedThread>> {
-    None // Simplified for compilation
+    global_scheduler().current_thread()
+}
+
+pub fn suspend_thread(thread_id: ThreadId) {
+    global_scheduler().suspend_thread(thread_id);
+}
+
+pub fn resume_thread(thread_id: ThreadId) {
+    global_scheduler().resume_thread(thread_id);
+}
+
+pub fn terminate_thread(thread_id: ThreadId) {
+    global_scheduler().terminate_thread(thread_id);
 }
 
 #[cfg(test)]

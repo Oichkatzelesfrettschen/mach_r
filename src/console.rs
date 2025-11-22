@@ -6,6 +6,24 @@
 use core::fmt::{self, Write};
 use spin::Mutex;
 
+// QEMU virt machine UART base
+const UART_BASE: usize = 0x0900_0000;
+
+struct Uart {
+    base: usize,
+}
+
+impl Uart {
+    const fn new(base: usize) -> Self {
+        Self { base }
+    }
+    
+    unsafe fn putc(&self, c: u8) {
+        let ptr = self.base as *mut u8;
+        ptr.write_volatile(c);
+    }
+}
+
 /// Console writer interface
 pub struct Console {
     // In a real kernel, this would contain hardware-specific state
@@ -35,13 +53,9 @@ impl Console {
         
         #[cfg(not(test))]
         {
-            // In kernel mode, would write to hardware
-            // For x86_64: out to serial port 0x3F8
-            // For ARM: write to UART register
-            // This is platform-specific
+            // In kernel mode, write to UART hardware
             unsafe {
-                // Placeholder for hardware write
-                core::ptr::write_volatile(0xB8000 as *mut u8, byte);
+                Uart::new(UART_BASE).putc(byte);
             }
         }
     }
@@ -49,6 +63,9 @@ impl Console {
     /// Write a string to the console
     pub fn write_str(&mut self, s: &str) {
         for byte in s.bytes() {
+            if byte == b'\n' { // Handle newlines for serial output
+                self.write_byte(b'\r');
+            }
             self.write_byte(byte);
         }
     }
@@ -60,8 +77,7 @@ impl Console {
         
         #[cfg(not(test))]
         {
-            // Clear screen implementation
-            // Platform-specific
+            // Clear screen implementation (platform-specific, not implemented for serial)
         }
     }
 }

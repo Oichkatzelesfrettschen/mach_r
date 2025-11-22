@@ -1,8 +1,0 @@
-[package]
-name = "mach_r_kernel"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-
-[build-dependencies]

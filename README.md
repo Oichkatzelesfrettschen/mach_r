@@ -39,15 +39,27 @@ See [ROADMAP.md](ROADMAP.md) for detailed development timeline and [docs/project
 
 ### Prerequisites
 
-- **Rust Toolchain:** 1.70 or later
-- **QEMU:** For running the kernel
-- **Cross-compilation targets:**
-  ```bash
-  rustup target add aarch64-unknown-none
-  rustup target add x86_64-unknown-none
-  ```
+- **Docker:** For running the development container.
+- **VS Code with Dev Containers extension:** For the best development experience.
 
-##
+### Getting Started
+
+1.  **Clone the repository:**
+    ```bash
+    git clone https://github.com/YOUR_USERNAME/Synthesis.git
+    cd Synthesis
+    ```
+2.  **Open in Dev Container:**
+    *   Open the project in VS Code.
+    *   When prompted, click "Reopen in Container". This will build the Docker image and set up the development environment.
+3.  **Build the kernel:**
+    ```bash
+    # Build for x86_64
+    cargo xtask kernel --target x86_64
+
+    # Build for aarch64
+    cargo xtask kernel --target aarch64
+    ```
 
 ## Architecture
 
@@ -138,13 +150,9 @@ Synthesis/
 
 ### Building and Running
 
-Mach_R uses `cargo xtask` for all build and run operations.
+Mach_R uses `cargo xtask` for all build and run operations inside the devcontainer.
 
 ```bash
-# Clone the repository
-git clone https://github.com/YOUR_USERNAME/Synthesis.git
-cd Synthesis
-
 # List all available xtask commands
 cargo xtask help
 
@@ -171,17 +179,6 @@ cargo xtask test
 
 # Check code style, lints, and build (fmt-check, clippy, test)
 cargo xtask check
-### Building from Source
-
-```bash
-# Install dependencies (rustup targets and components are checked by 'env-check')
-cargo xtask env-check
-
-# Build the kernel (AArch64 release by default)
-cargo xtask kernel
-
-# Run in QEMU
-cargo xtask qemu
 ```
 
 ### Running Tests

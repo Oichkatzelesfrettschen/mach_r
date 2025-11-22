@@ -6,6 +6,8 @@ use std::fs::OpenOptions;
 use std::io::Write as IoWrite;
 use sha2::{Sha256, Digest};
 use std::fs::read_dir;
+use shell_escape::escape;
+use std::borrow::Cow;
 
 fn run(cmd: &mut Command) -> anyhow::Result<()> {
     eprintln!("[RUN] {:?}", cmd);
@@ -96,15 +98,17 @@ fn build_kernel_for_target_profile(target: &str, profile: &str) -> anyhow::Resul
     let final_profile_dir = if profile == "release" { "release" } else { "debug" };
 
     eprintln!("[BUILD] Building {} kernel for {} profile...", target, profile);
-    run(rustup().args(["target", "add", target]))?;
-    run(cargo().args([
+    
+    let mut cmd = Command::new("cross");
+    cmd.args([
         "build",
         cargo_profile_flag,
         "--target",
         target,
         "--bin",
         "mach_r",
-    ].into_iter().filter(|s| !s.is_empty()).collect::<Vec<&str>>()))?;
+    ].into_iter().filter(|s| !s.is_empty()).collect::<Vec<&str>>());
+    run(&mut cmd)?;
 
     let elf_path_in_target = root_dir.join(format!(
         "target/{}/{}/mach_r",
@@ -274,7 +278,7 @@ fn task_utm() -> anyhow::Result<()> {
 
 fn task_qemu_kernel(args: &[String]) -> anyhow::Result<()> {
     let (_build, dist) = ensure_dirs()?;
-    let mut qemu_target_arch = "aarch64-unknown-none"; // Default
+    let mut qemu_target_arch_str = "aarch64-unknown-none".to_string(); // Default
     let mut qemu_system_cmd = "qemu-system-aarch64";
     let mut qemu_machine = "virt";
     let mut qemu_cpu = "cortex-a72";
@@ -284,12 +288,12 @@ fn task_qemu_kernel(args: &[String]) -> anyhow::Result<()> {
     // Allow --target <arch> to specify the qemu system and kernel
     if let Some(pos) = parsed_args.iter().position(|a| a == "--target") {
         if let Some(target_val) = parsed_args.get(pos + 1) {
-            qemu_target_arch = match target_val.as_str() {
-                "aarch64" => "aarch64-unknown-none",
-                "x86_64" => "x86_64-unknown-none",
+            qemu_target_arch_str = match target_val.as_str() {
+                "aarch64" => "aarch64-unknown-none".to_string(),
+                "x86_64" => "x86_64-unknown-none".to_string(),
                 _ => anyhow::bail!("Unsupported QEMU target architecture: {}", target_val),
             };
-            match qemu_target_arch {
+            match qemu_target_arch_str.as_str() {
                 "aarch64-unknown-none" => {
                     qemu_system_cmd = "qemu-system-aarch64";
                     qemu_machine = "virt";
@@ -306,9 +310,10 @@ fn task_qemu_kernel(args: &[String]) -> anyhow::Result<()> {
             parsed_args.remove(pos); // Remove <arch>
         }
     }
+    let qemu_target_arch = qemu_target_arch_str.as_str();
 
     let kernel_elf_name = format!("mach_r_kernel_{}.elf", qemu_target_arch);
-    let kernel = dist.join(&kernel_elf_name);
+    let _kernel = dist.join(&kernel_elf_name);
     let kernel_bin_name = format!("mach_r_kernel_{}.bin", qemu_target_arch);
     let kernel_bin = dist.join(&kernel_bin_name);
 
@@ -817,11 +822,13 @@ menuentry "Mach_R Microkernel" {
     boot
 }
 "#;
-    let mut tee_cmd = Command::new("tee");
-    tee_cmd.arg(grub_dir.join("grub.cfg").to_str().unwrap());
-    let mut child = run_sudo(&mut tee_cmd.stdin(std::process::Stdio::piped()))?;
-    child.stdin.as_mut().unwrap().write_all(grub_cfg_content.as_bytes())?;
-    child.wait()?;
+    let escaped_content = escape(grub_cfg_content.into());
+    let grub_cfg_file = grub_dir.join("grub.cfg");
+    let escaped_path = escape(Cow::Borrowed(grub_cfg_file.to_str().unwrap()));
+    run_sudo(&mut Command::new("bash")
+        .arg("-c")
+        .arg(format!("echo {} | tee {}", escaped_content, escaped_path))
+    )?;
 
     // Install GRUB bootloader
     eprintln!("[DISK] Installing GRUB to MBR...");
@@ -1000,12 +1007,12 @@ fn task_qemu_with_args(args: &[String]) -> anyhow::Result<()> {
 
     let mut qemu_system_cmd = "qemu-system-aarch64";
     let mut qemu_machine = "virt";
-    let mut qemu_cpu = &opts.cpu; // Use parsed CPU
+    let _qemu_cpu = &opts.cpu; // Use parsed CPU
     let mut kernel_target = "aarch64-unknown-none";
 
     // Determine QEMU system command and parameters based on target architecture,
     // which can be passed via --target argument to xtask
-    let mut temp_args = args.to_vec(); // Use a mutable copy of args for parsing
+    let temp_args = args.to_vec(); // Use a mutable copy of args for parsing
     if let Some(pos) = temp_args.iter().position(|a| a == "--target") {
         if let Some(target_val) = temp_args.get(pos + 1) {
             kernel_target = match target_val.as_str() {
@@ -1086,21 +1093,21 @@ fn task_qemu_debug(args: &[String]) -> anyhow::Result<()> {
     
     let opts = parse_qemu_opts(args); // Parse args again for debug options
 
-    let mut qemu_target_arch = "aarch64-unknown-none"; // Default
+    let mut qemu_target_arch_str = "aarch64-unknown-none".to_string(); // Default
     let mut qemu_system_cmd = "qemu-system-aarch64";
     let mut qemu_machine = "virt";
-    let mut qemu_cpu = &opts.cpu;
+    let qemu_cpu = &opts.cpu;
 
     // Parse args for target architecture
-    let mut temp_args = args.to_vec();
+    let temp_args = args.to_vec();
     if let Some(pos) = temp_args.iter().position(|a| a == "--target") {
         if let Some(target_val) = temp_args.get(pos + 1) {
-            qemu_target_arch = match target_val.as_str() {
-                "aarch64" => "aarch64-unknown-none",
-                "x86_64" => "x86_64-unknown-none",
+            qemu_target_arch_str = match target_val.as_str() {
+                "aarch64" => "aarch64-unknown-none".to_string(),
+                "x86_64" => "x86_64-unknown-none".to_string(),
                 _ => anyhow::bail!("Unsupported QEMU target architecture: {}", target_val),
             };
-            match qemu_target_arch {
+            match qemu_target_arch_str.as_str() {
                 "aarch64-unknown-none" => {
                     qemu_system_cmd = "qemu-system-aarch64";
                     qemu_machine = "virt";
@@ -1113,9 +1120,10 @@ fn task_qemu_debug(args: &[String]) -> anyhow::Result<()> {
             }
         }
     }
+    let qemu_target_arch = qemu_target_arch_str.as_str();
 
     let kernel_elf_name = format!("mach_r_kernel_{}.elf", qemu_target_arch);
-    let kernel_elf = dist.join(&kernel_elf_name);
+    let _kernel_elf = dist.join(&kernel_elf_name);
     let kernel_bin_name = format!("mach_r_kernel_{}.bin", qemu_target_arch);
     let kernel_bin = dist.join(&kernel_bin_name);
 
@@ -1166,7 +1174,7 @@ fn task_qemu_debug(args: &[String]) -> anyhow::Result<()> {
 
 fn print_help() {
     eprintln!(
-        "xtask commands:\n  fmt | fmt-check | clippy | test | check | env-check | clean | all\n  docs | book\n  kernel | bootloader | filesystem | disk-image | iso-image | utm | verify-targets | test-boot\n  qemu | qemu-fast | qemu-dev | qemu-kernel | qemu-debug\n  mig   # generate MIG stubs (e.g., name_server)\n\nContainer commands:\n  setup-container-env   # Generate Dockerfile and docker-compose.yml\n  build-in-container [--target <target>] [--release]   # Build kernel(s) inside container\n  test-in-container     # Run tests inside container\n  shell-in-container    # Open a bash shell inside container\n  clean-in-container    # Run cargo clean inside container\n  rebuild-container-image  # Rebuild docker container image with --no-cache\n  qemu-in-container     # Run QEMU inside container (x86_64 release build only) \n\nQEMU options (before --): --cpu <name> | --cpus <n> | --mem <size> | --display <mode> | --gui | --vga <type> | --no-reboot | --debug-flags <flags> | --logfile <file> | -- <extra qemu args>\n\nExamples:\n  cargo run -p xtask -- fmt\n  cargo run -p xtask -- kernel\n  cargo run -p xtask -- disk-image
+        "xtask commands:\n  fmt | fmt-check | clippy | test | check | env-check | clean | all\n  docs | book\n  kernel | bootloader | filesystem | disk-image | iso-image | utm\n  qemu | qemu-fast | qemu-dev | qemu-kernel | qemu-debug\n  mig   # generate MIG stubs (e.g., name_server)\n\nContainer commands:\n  setup-container-env   # Generate Dockerfile and docker-compose.yml\n  build-in-container [--target <target>] [--release]   # Build kernel(s) inside container\n  test-in-container     # Run tests inside container\n  shell-in-container    # Open a bash shell inside container\n  clean-in-container    # Run cargo clean inside container\n  rebuild-container-image  # Rebuild docker container image with --no-cache\n  qemu-in-container     # Run QEMU inside container (x86_64 release build only) \n\nQEMU options (before --): --cpu <name> | --cpus <n> | --mem <size> | --display <mode> | --gui | --vga <type> | --no-reboot | --debug-flags <flags> | --logfile <file> | -- <extra qemu args>\n\nExamples:\n  cargo run -p xtask -- fmt\n  cargo run -p xtask -- kernel\n  cargo run -p xtask -- disk-image
   cargo run -p xtask -- iso-image --target x86_64\n  cargo run -p xtask -- qemu --mem 1G --cpus 2 -- -d guest_errors\n  cargo run -p xtask -- qemu --gui --display default\n  cargo run -p xtask -- qemu-kernel --target x86_64\n  cargo run -p xtask -- qemu-debug --target x86_64\n  cargo run -p xtask -- mig\n  cargo run -p xtask -- utm\n  cargo run -p xtask -- clean\n  cargo run -p xtask -- all\n  cargo run -p xtask -- verify-targets\n  cargo run -p xtask -- test-boot\n  cargo run -p xtask -- setup-container-env\n  cargo run -p xtask -- build-in-container --target x86_64 --release\n  cargo run -p xtask -- test-in-container\n  cargo run -p xtask -- shell-in-container\n  cargo run -p xtask -- clean-in-container\n  cargo run -p xtask -- rebuild-container-image\n  cargo run -p xtask -- qemu-in-container"
     );
 }
@@ -1215,18 +1223,7 @@ fn main() -> anyhow::Result<()> {
         "utm" => task_utm(),
         "clean" => task_clean(),
         "all" => task_all(),
-        "verify-targets" => task_verify_targets(),
-        "test-boot" => task_test_boot(),
-        "setup-container-env" => task_setup_container_env(),
-        "build-in-container" => {
-            let rest: Vec<String> = args.collect();
-            task_build_in_container(&rest)
-        },
-        "test-in-container" => task_test_in_container(),
-        "shell-in-container" => task_shell_in_container(),
-        "clean-in-container" => task_clean_in_container(),
-        "rebuild-container-image" => task_rebuild_container_image(),
-        "qemu-in-container" => task_qemu_in_container(),
+
         _ => {
             print_help();
             Ok(())
@@ -1257,12 +1254,13 @@ fn task_all() -> anyhow::Result<()> {
     task_kernel()?;
     task_filesystem()?;
     task_disk_image()?;
-    task_iso_image()?;
+    task_iso_image_with_args(&[])?;
     task_utm()?;
     eprintln!("[BUILD ALL] Full build process completed successfully!");
     Ok(())
 }
 
+#[allow(dead_code)]
 fn build_lib_for_target(target: &str) -> anyhow::Result<()> {
     eprintln!("[BUILD LIB] Building library for {}...", target);
     run(rustup().args(["target", "add", target]).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()))?;
@@ -1282,490 +1280,9 @@ fn build_lib_for_target(target: &str) -> anyhow::Result<()> {
     }
 }
 
-fn task_setup_container_env() -> anyhow::Result<()> {
-    eprintln!("[CONTAINER] Setting up containerized build environment...");
 
-    if !have("docker") {
-        eprintln!("[WARN] Docker command not found. Cannot set up containerized environment.");
-        eprintln!("[INFO] Please install Docker: https://docs.docker.com/get-docker/");
-        anyhow::bail!("Docker not installed.");
-    }
 
-    // Check if Docker daemon is running
-    let docker_info_output = Command::new("docker").arg("info").output()?;
-    if !docker_info_output.status.success() {
-        eprintln!("[WARN] Docker daemon is not running. Cannot set up containerized environment.");
-        eprintln!("[INFO] Please start your Docker daemon.");
-        anyhow::bail!("Docker daemon not running.");
-    }
-    eprintln!("[CONTAINER] Docker found and running.");
 
-    let root_dir = root()?;
-    let home_dir = std::env::var("HOME")?;
-    let docker_cache_dir = PathBuf::from(&home_dir).join(".docker/mach_r");
-    fs::create_dir_all(docker_cache_dir.join("cargo/registry"))?;
-    fs::create_dir_all(docker_cache_dir.join("cargo/git"))?;
-    fs::create_dir_all(docker_cache_dir.join("target"))?;
-    eprintln!("[CONTAINER] Ensured Docker cache directories exist in {}", docker_cache_dir.display());
-
-    // Generate Dockerfile
-    let dockerfile_content = r#"# Mach_R Build Container
-# Comprehensive cross-compilation environment for ARM Mac → x86_64 kernel development
-#
-# This container provides all tools needed to build a bootable x86_64 kernel on ARM Mac:
-# - Rust with bare-metal targets
-# - NASM assembler
-# - GCC cross-compilers
-# - GRUB bootloader tools
-# - QEMU for testing
-# - Image creation tools
-
-# Use multi-stage build for smaller final image
-FROM --platform=linux/amd64 ubuntu:22.04 AS base
-
-# Prevent interactive prompts during build
-ENV DEBIAN_FRONTEND=noninteractive
-ENV TZ=UTC
-
-# Install system dependencies in layers for better caching
-RUN apt-get update && apt-get install -y \
-    # Build essentials
-    build-essential \
-    curl \
-    wget \
-    git \
-    # Cross-compilation toolchain
-    gcc-x86-64-linux-gnu \
-    gcc-aarch64-linux-gnu \
-    binutils-x86-64-linux-gnu \
-    binutils-aarch64-linux-gnu \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install assemblers and bootloader tools (separate layer for caching)
-RUN apt-get update && apt-get install -y \
-    # Assemblers
-    nasm \
-    yasm \
-    # Bootloader tools
-    grub-pc-bin \
-    grub-common \
-    xorriso \
-    mtools \
-    dosfstools \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install QEMU and utilities (separate layer)
-RUN apt-get update && apt-get install -y \
-    # QEMU for testing
-    qemu-system-x86 \
-    qemu-system-arm \
-    qemu-system-aarch64 \
-    qemu-utils \
-    # Disk image tools
-    parted \
-    kpartx \
-    # Debugging tools
-    gdb \
-    gdb-multiarch \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install development utilities (separate layer)
-RUN apt-get update && apt-get install -y \
-    # Development tools
-    vim \
-    nano \
-    less \
-    htop \
-    tree \
-    # Version control
-    git \
-    # Archive tools
-    zip \
-    unzip \
-    tar \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Rust (rustup) - separate layer as it changes with Rust versions
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
-    --default-toolchain stable \
-    --profile minimal \
-    --no-modify-path
-
-ENV PATH="/root/.cargo/bin:${PATH}"
-
-# Add Rust bare-metal targets
-RUN /root/.cargo/bin/rustup target add \
-    x86_64-unknown-none \
-    aarch64-unknown-none
-
-# Install Rust components (separate layer)
-RUN /root/.cargo/bin/rustup component add \
-    rust-src \
-    rustfmt \
-    clippy \
-    llvm-tools-preview
-
-# Install cargo tools (separate layer - these change less frequently)
-RUN /root/.cargo/bin/cargo install \
-    cargo-binutils \
-    cargo-make \
-    && rm -rf /root/.cargo/registry
-
-# Set up working directory
-WORKDIR /workspace
-
-# Create mount points for volumes
-RUN mkdir -p /workspace/target \
-    && mkdir -p /root/.cargo/registry \
-    && mkdir -p /workspace/build/dist
-
-# Copy build scripts and configuration (do this last as it changes most often)
-COPY build-scripts/ /usr/local/bin/
-RUN chmod +x /usr/local/bin/*.sh 2>/dev/null || true
-
-# Environment variables for cross-compilation
-ENV CARGO_TARGET_X86_64_UNKNOWN_NONE_LINKER=x86_64-linux-gnu-gcc
-ENV CARGO_TARGET_AARCH64_UNKNOWN_NONE_LINKER=aarch64-linux-gnu-gcc
-ENV CC_x86_64_unknown_none=x86_64-linux-gnu-gcc
-ENV AR_x86_64_unknown_none=x86_64-linux-gnu-ar
-ENV CC_aarch64_unknown_none=aarch64-linux-gnu-gcc
-ENV AR_aarch64_unknown_none=aarch64-linux-gnu-ar
-
-# Default build command
-CMD ["cargo", "build", "--lib", "--target", "x86_64-unknown-none"]
-
-# Healthcheck to ensure container is working
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD cargo --version && rustc --version && nasm --version || exit 1
-
-# Labels for metadata
-LABEL maintainer="Mach_R Project"
-LABEL description="Complete build environment for Mach_R microkernel"
-LABEL version="0.1.0"
-LABEL architecture="multi-arch (supports ARM64 host → x86_64 target)"
-"#;
-    let dockerfile_path = root_dir.join("Dockerfile");
-    fs::write(&dockerfile_path, dockerfile_content)?;
-    eprintln!("[CONTAINER] Generated Dockerfile at {}", dockerfile_path.display());
-
-    // Generate docker-compose.yml
-    let docker_compose_content = format!(r#"version: '3.8'
-
-services:
-  # Main build service
-  builder:
-    # Force x86_64 platform for compatibility
-    platform: linux/amd64
-    build:
-      context: .
-      dockerfile: Dockerfile.build
-      # Use BuildKit for faster builds
-      cache_from:
-        - mach_r_builder:latest
-    image: mach_r_builder:latest
-    container_name: mach_r_builder
-
-    # Mount source code and preserve build artifacts
-    volumes:
-      # Source code (read-write)
-      - .:/workspace:cached
-
-      # Cargo registry cache (persist between builds)
-      - cargo_registry:/root/.cargo/registry
-
-      # Cargo git cache (persist between builds)
-      - cargo_git:/root/.cargo/git
-
-      # Build output (fast I/O for target directory)
-      - build_target:/workspace/target
-
-      # Build distribution artifacts
-      - ./build/dist:/workspace/build/dist:rw
-
-    # Environment variables
-    environment:
-      # Build configuration
-      - RUSTFLAGS=-C linker=x86_64-linux-gnu-gcc -C link-arg=-nostartfiles
-      - CARGO_BUILD_JOBS=4
-      - RUST_BACKTRACE=1
-
-      # Target configuration
-      - CARGO_TARGET_DIR=/workspace/target
-      - CARGO_HOME=/root/.cargo
-
-      # Development aids
-      - TERM=xterm-256color
-      - COLORTERM=truecolor
-
-    # Working directory
-    working_dir: /workspace
-
-    # Keep container running for interactive development
-    stdin_open: true
-    tty: true
-
-    # Resource limits (adjust for your Mac)
-    deploy:
-      resources:
-        limits:
-          cpus: '4.0'
-          memory: 8G
-        reservations:
-          cpus: '2.0'
-          memory: 4G
-
-    # Default command (can be overridden)
-    command: /bin/bash
-
-  # Quick build service (no interactive shell)
-  quick-build:
-    extends: builder
-    container_name: mach_r_quick_build
-    stdin_open: false
-    tty: false
-    command: cargo build --lib --target x86_64-unknown-none
-
-  # Test runner service
-  test:
-    extends: builder
-    container_name: mach_r_test
-    command: cargo test --lib
-
-  # QEMU test service (run built kernel)
-  qemu:
-    extends: builder
-    container_name: mach_r_qemu
-    # Add QEMU GUI support (requires X11 forwarding on Mac)
-    environment:
-      - DISPLAY=${{DISPLAY}}
-      - RUSTFLAGS=-C linker=x86_64-linux-gnu-gcc -C link-arg=-nostartfiles
-    # Expose QEMU monitor port
-    ports:
-      - "5555:5555"  # QEMU monitor
-      - "1234:1234"  # GDB debugging
-    command: >
-      bash -c "
-        echo 'Building kernel...' &&
-        cargo build --release --target x86_64-unknown-none &&
-        echo 'Launching QEMU...' &&
-        qemu-system-x86_64
-          -kernel target/x86_64-unknown-none/release/mach_r
-          -serial stdio
-          -monitor tcp:0.0.0.0:5555,server,nowait
-          -s
-          -S
-      "
-
-  # Development shell with all tools
-  dev:
-    extends: builder
-    container_name: mach_r_dev
-    volumes:
-      # Add SSH keys for git operations
-      - {home_dir}/.ssh:/root/.ssh:ro
-      # Add git config
-      - {home_dir}/.gitconfig:/root/.gitconfig:ro
-    command: /bin/bash
-
-# Named volumes for persistent caching
-volumes:
-  # Cargo registry cache (Rust dependencies)
-  cargo_registry:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: {home_dir}/.docker/mach_r/cargo/registry
-
-  # Cargo git cache
-  cargo_git:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: {home_dir}/.docker/mach_r/cargo/git
-
-  # Build artifacts (target directory)
-  build_target:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: {home_dir}/.docker/mach_r/target
-
-# Networks (optional - for future multi-container setups)
-networks:
-  default:
-    name: mach_r_build_network
-"#, home_dir = home_dir.display());
-    let docker_compose_path = root_dir.join("docker-compose.yml");
-    fs::write(&docker_compose_path, docker_compose_content)?;
-    eprintln!("[CONTAINER] Generated docker-compose.yml at {}", docker_compose_path.display());
-
-    eprintln!("[CONTAINER] Containerized build environment setup complete.");
-    Ok(())
-}
-
-fn task_build_in_container(args: &[String]) -> anyhow::Result<()> {
-    eprintln!("[CONTAINER] Building Mach_R inside Docker container...");
-
-    let root_dir = root()?;
-    let dockerfile_path = root_dir.join("Dockerfile");
-    let docker_compose_path = root_dir.join("docker-compose.yml");
-
-    // Ensure container environment is set up
-    if !dockerfile_path.exists() || !docker_compose_path.exists() {
-        eprintln!("[INFO] Container environment not found, setting it up now...");
-        task_setup_container_env()?;
-    }
-
-    // Build Docker image (service: builder)
-    eprintln!("[CONTAINER] Building Docker image for 'builder' service...");
-    run(Command::new("docker-compose").args(["build", "builder"]))?;
-
-    let mut target = "aarch64-unknown-none"; // Default
-    let mut profile = "debug"; // Default
-    let mut build_args = vec![];
-
-    let mut i = 0;
-    while i < args.len() {
-        match args[i].as_str() {
-            "--target" if i + 1 < args.len() => {
-                target = args[i + 1].as_str();
-                i += 2;
-            }
-            "--release" => {
-                profile = "release";
-                i += 1;
-            }
-            _ => {
-                build_args.push(args[i].clone());
-                i += 1;
-            }
-        }
-    }
-
-    let cargo_profile_flag = if profile == "release" { "--release" } else { "" };
-
-    eprintln!("[CONTAINER] Building for {} (profile: {}) inside container...", target, profile);
-    let mut cmd = Command::new("docker-compose");
-    cmd.args([
-        "run", "--rm", "builder",
-        "cargo", "build", "--lib", "--target", target,
-    ]);
-
-    if !cargo_profile_flag.is_empty() {
-        cmd.arg(cargo_profile_flag);
-    }
-    if !build_args.is_empty() {
-        cmd.args(&build_args);
-    }
-
-    run(&mut cmd)?;
-
-    eprintln!("[CONTAINER] Containerized build complete for target {} (profile: {})!", target, profile);
-    Ok(())
-}
-
-fn task_test_in_container() -> anyhow::Result<()> {
-    eprintln!("[CONTAINER] Running tests inside Docker container...");
-
-    let root_dir = root()?;
-    let dockerfile_path = root_dir.join("Dockerfile");
-    let docker_compose_path = root_dir.join("docker-compose.yml");
-
-    // Ensure container environment is set up
-    if !dockerfile_path.exists() || !docker_compose_path.exists() {
-        eprintln!("[INFO] Container environment not found, setting it up now...");
-        task_setup_container_env()?;
-    }
-
-    run(Command::new("docker-compose").args(["run", "--rm", "test"]))?;
-
-    eprintln!("[CONTAINER] Containerized tests complete!");
-    Ok(())
-}
-
-fn task_shell_in_container() -> anyhow::Result<()> {
-    eprintln!("[CONTAINER] Opening shell inside Docker container...");
-
-    let root_dir = root()?;
-    let dockerfile_path = root_dir.join("Dockerfile");
-    let docker_compose_path = root_dir.join("docker-compose.yml");
-
-    // Ensure container environment is set up
-    if !dockerfile_path.exists() || !docker_compose_path.exists() {
-        eprintln!("[INFO] Container environment not found, setting it up now...");
-        task_setup_container_env()?;
-    }
-    eprintln!("[CONTAINER] To exit the container shell, type 'exit'.");
-    run(Command::new("docker-compose").args(["run", "--rm", "dev"]))?;
-
-    eprintln!("[CONTAINER] Exited container shell.");
-    Ok(())
-}
-
-fn task_clean_in_container() -> anyhow::Result<()> {
-    eprintln!("[CONTAINER] Cleaning build artifacts inside Docker container...");
-
-    let root_dir = root()?;
-    let dockerfile_path = root_dir.join("Dockerfile");
-    let docker_compose_path = root_dir.join("docker-compose.yml");
-
-    // Ensure container environment is set up
-    if !dockerfile_path.exists() || !docker_compose_path.exists() {
-        eprintln!("[INFO] Container environment not found, setting it up now...");
-        task_setup_container_env()?;
-    }
-
-    run(Command::new("docker-compose").args(["run", "--rm", "builder", "cargo", "clean"]))?;
-
-    eprintln!("[CONTAINER] Containerized clean complete!");
-    Ok(())
-}
-
-fn task_rebuild_container_image() -> anyhow::Result<()> {
-    eprintln!("[CONTAINER] Rebuilding Docker container image with --no-cache...");
-
-    let root_dir = root()?;
-    let dockerfile_path = root_dir.join("Dockerfile");
-    let docker_compose_path = root_dir.join("docker-compose.yml");
-
-    // Ensure container environment is set up
-    if !dockerfile_path.exists() || !docker_compose_path.exists() {
-        eprintln!("[INFO] Container environment not found, setting it up now...");
-        task_setup_container_env()?;
-    }
-
-    run(Command::new("docker-compose").args(["build", "--no-cache", "builder"]))?;
-
-    eprintln!("[CONTAINER] Docker image rebuilt!");
-    Ok(())
-}
-
-fn task_qemu_in_container() -> anyhow::Result<()> {
-    eprintln!("[CONTAINER] Running QEMU inside Docker container...");
-
-    let root_dir = root()?;
-    let dockerfile_path = root_dir.join("Dockerfile");
-    let docker_compose_path = root_dir.join("docker-compose.yml");
-
-    // Ensure container environment is set up
-    if !dockerfile_path.exists() || !docker_compose_path.exists() {
-        eprintln!("[INFO] Container environment not found, setting it up now...");
-        task_setup_container_env()?;
-    }
-
-    // Build Docker image (service: builder)
-    eprintln!("[CONTAINER] Building Docker image for 'builder' service if not already built...");
-    run(Command::new("docker-compose").args(["build", "builder"]))?;
-
-    eprintln!("[CONTAINER] Starting QEMU via 'qemu' service in container...");
-    run(Command::new("docker-compose").args(["run", "--rm", "qemu"]))?;
-
-    eprintln!("[CONTAINER] QEMU session in container ended.");
-    Ok(())
-}
 
 fn task_mig() -> anyhow::Result<()> {
     // Generate MIG stubs from TOML specs in mig/specs/
@@ -1849,15 +1366,19 @@ struct MigRoutine {
     name: String,
     id: u32,
     #[serde(default)]
+    #[allow(dead_code)]
     inputs: Vec<MigField>,
     #[serde(default)]
+    #[allow(dead_code)]
     outputs: Vec<MigField>,
 }
 
 #[derive(serde::Deserialize)]
 struct MigField {
+    #[allow(dead_code)]
     name: String,
     #[serde(rename = "type")]
+    #[allow(dead_code)]
     typ: String,
 }
 

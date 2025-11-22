@@ -5,10 +5,51 @@
 
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use spin::Mutex;
+use alloc::string::String;
+use alloc::boxed::Box;
+use spin::{Mutex, Once};
 use crate::port::Port;
-use crate::types::{TaskId, ThreadId, PortId};
-use crate::memory::vm::VmMap;
+use crate::types::{TaskId, ThreadId};
+
+use crate::paging::PageTable;
+use crate::ipc::PortName;
+
+/// CPU context for thread switching
+#[repr(C)]
+#[derive(Debug, Clone)]
+pub struct Context {
+    // ARM64 registers
+    pub x0: u64, pub x1: u64, pub x2: u64, pub x3: u64,
+    pub x4: u64, pub x5: u64, pub x6: u64, pub x7: u64,
+    pub x8: u64, pub x9: u64, pub x10: u64, pub x11: u64,
+    pub x12: u64, pub x13: u64, pub x14: u64, pub x15: u64,
+    pub x16: u64, pub x17: u64, pub x18: u64, pub x19: u64,
+    pub x20: u64, pub x21: u64, pub x22: u64, pub x23: u64,
+    pub x24: u64, pub x25: u64, pub x26: u64, pub x27: u64,
+    pub x28: u64, pub x29: u64, pub x30: u64,  // x30 is link register
+    pub sp: u64,   // Stack pointer
+    pub pc: u64,   // Program counter
+    pub pstate: u64,  // Processor state
+}
+
+impl Context {
+    pub fn new() -> Self {
+        Self {
+            x0: 0, x1: 0, x2: 0, x3: 0,
+            x4: 0, x5: 0, x6: 0, x7: 0,
+            x8: 0, x9: 0, x10: 0, x11: 0,
+            x12: 0, x13: 0, x14: 0, x15: 0,
+            x16: 0, x17: 0, x18: 0, x19: 0,
+            x20: 0, x21: 0, x22: 0, x23: 0,
+            x24: 0, x25: 0, x26: 0, x27: 0,
+            x28: 0, x29: 0, x30: 0,
+            sp: 0,
+            pc: 0,
+            pstate: 0,
+        }
+    }
+}
+
 
 /// Task state
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -24,14 +65,56 @@ pub enum TaskState {
 }
 
 
-/// Thread structure (simplified)
-pub struct Thread {
-    /// Thread ID
+/// A thread - the unit of execution, managed by a Task
+pub struct TaskThread {
     pub id: ThreadId,
-    /// Owning task
     pub task: TaskId,
-    /// Thread state
     pub state: ThreadState,
+    pub priority: Priority,
+    pub context: Context,
+    pub kernel_stack: usize, // Base address of the kernel stack
+    pub user_stack: usize,   // Base address of the user stack (if applicable)
+    pub name: String,
+}
+
+impl TaskThread {
+    pub fn new(task: TaskId, entry: usize, stack: usize, name: String) -> Self {
+        let id = ThreadId::new();
+        let mut context = Context::new();
+        context.pc = entry as u64;
+        context.sp = stack as u64;
+        
+        Self {
+            id,
+            task,
+            state: ThreadState::Ready,
+            priority: Priority::DEFAULT,
+            context,
+            kernel_stack: stack,
+            user_stack: 0, // Placeholder
+            name,
+        }
+    }
+    
+    pub fn block(&mut self) {
+        self.state = ThreadState::Blocked;
+    }
+    
+    pub fn unblock(&mut self) {
+        if self.state == ThreadState::Blocked {
+            self.state = ThreadState::Ready;
+        }
+    }
+    
+    pub fn suspend(&mut self) {
+        self.state = ThreadState::Suspended;
+    }
+    
+    pub fn resume(&mut self) {
+        if self.state == ThreadState::Suspended {
+            self.state = ThreadState::Ready;
+        }
+    }
 }
 
 /// Thread state
@@ -43,139 +126,142 @@ pub enum ThreadState {
     Ready,
     /// Thread is blocked
     Blocked,
+    /// Thread is suspended
+    Suspended,
     /// Thread is terminated
     Terminated,
 }
 
-/// Scheduler module
-pub mod scheduler {
-    pub use crate::scheduler::*;
+/// Thread priority
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Priority(pub u8);
+
+impl Priority {
+    pub const IDLE: Self = Self(0);
+    pub const LOW: Self = Self(31);
+    pub const DEFAULT: Self = Self(63);
+    pub const HIGH: Self = Self(95);
+    pub const REALTIME: Self = Self(127);
+    
+    pub fn new(val: u8) -> Self {
+        Self(val.min(127))
+    }
 }
 
-/// Port namespace for a task
-pub struct PortNamespace {
-    /// Ports owned by this task
-    ports: Vec<Arc<Port>>,
-    /// Port rights table
-    rights: Vec<(PortId, PortRights)>,
-}
 
-/// Port rights for a specific port
-#[derive(Debug, Clone)]
-pub struct PortRights {
-    /// Has receive right
-    pub receive: bool,
-    /// Number of send rights
-    pub send: u32,
-    /// Number of send-once rights
-    pub send_once: u32,
-}
 
 /// Task structure - the basic unit of resource allocation
 pub struct Task {
-    /// Task ID
-    id: TaskId,
-    /// Task state
-    state: Mutex<TaskState>,
-    /// Virtual memory map
-    vm_map: Mutex<VmMap>,
-    /// Threads belonging to this task
-    threads: Mutex<Vec<Thread>>,
-    /// Port namespace
-    ports: Mutex<PortNamespace>,
-    /// Task port (for task control)
-    task_port: Arc<Port>,
+    pub id: TaskId,
+    pub state: Mutex<TaskState>,
+    pub name: String,
+    pub threads: Mutex<Vec<ThreadId>>,
+    pub page_table: Box<PageTable>,
+    pub ports: Mutex<Vec<PortName>>,
+    pub bootstrap_port: PortName,
+    pub exception_ports: [PortName; 32],
 }
 
 impl Task {
-    /// Create a new task
-    pub fn new() -> Arc<Self> {
+    pub fn new(name: String) -> Arc<Self> {
         let task_id = TaskId::new();
-        let task_port = Port::new(task_id);
-        
+        let _task_port = Port::new(task_id); // This will create a Port and register it globally
+
         Arc::new(Task {
             id: task_id,
             state: Mutex::new(TaskState::Running),
-            vm_map: Mutex::new(VmMap::new(0x1000000, 0x1000000)), // 16MB at 16MB
+            name,
             threads: Mutex::new(Vec::new()),
-            ports: Mutex::new(PortNamespace {
-                ports: Vec::new(),
-                rights: Vec::new(),
-            }),
-            task_port,
+            page_table: Box::new(PageTable::new()), // Initialize with a new page table
+            ports: Mutex::new(Vec::new()),
+            bootstrap_port: PortName::NULL,
+            exception_ports: [PortName::NULL; 32],
         })
     }
     
-    /// Get task ID
     pub fn id(&self) -> TaskId {
         self.id
     }
     
-    /// Get task state
     pub fn state(&self) -> TaskState {
         *self.state.lock()
     }
     
-    /// Set task state
     pub fn set_state(&self, new_state: TaskState) {
         *self.state.lock() = new_state;
     }
     
-    /// Suspend the task
     pub fn suspend(&self) {
         *self.state.lock() = TaskState::Suspended;
-        // Would also suspend all threads
+        // Suspend all threads
+        for &thread_id in self.threads.lock().iter() {
+            crate::scheduler::global_scheduler().suspend_thread(thread_id); // Use global scheduler
+        }
     }
     
-    /// Resume the task
     pub fn resume(&self) {
         *self.state.lock() = TaskState::Running;
-        // Would also resume threads
+        // Resume all threads
+        for &thread_id in self.threads.lock().iter() {
+            crate::scheduler::global_scheduler().resume_thread(thread_id); // Use global scheduler
+        }
     }
     
-    /// Terminate the task
     pub fn terminate(&self) {
         *self.state.lock() = TaskState::Terminated;
-        // Would also terminate all threads and release resources
+        // Terminate all threads
+        for &thread_id in self.threads.lock().iter() {
+            crate::scheduler::global_scheduler().terminate_thread(thread_id); // Use global scheduler
+        }
     }
     
-    /// Create a new thread in this task
-    pub fn create_thread(&self) -> ThreadId {
-        let thread_id = ThreadId::new();
+    pub fn create_thread(&self, entry: usize, stack_size: usize, name: String) -> ThreadId {
+        // Allocate stack
+        let stack_top = crate::memory::alloc_stack(stack_size);
+        let task_thread = TaskThread::new(self.id, entry, stack_top, name);
+        let thread_id = task_thread.id;
+
+        // Create SchedThread and add to scheduler
+        let sched_thread = Arc::new(crate::scheduler::SchedThread {
+            thread_id: task_thread.id,
+            task_id: task_thread.task,
+            priority: task_thread.priority.0 as usize, // Convert Priority to usize
+            quantum: core::sync::atomic::AtomicU64::new(crate::scheduler::TIME_QUANTUM_MS),
+            state: spin::Mutex::new(task_thread.state),
+            affinity: core::sync::atomic::AtomicUsize::new(usize::MAX),
+            context: spin::Mutex::new(task_thread.context),
+        });
         
-        let thread = Thread {
-            id: thread_id,
-            task: self.id,
-            state: ThreadState::Ready,
-        };
+        crate::scheduler::add_thread(sched_thread);
         
-        self.threads.lock().push(thread);
+        // Track in task
+        self.threads.lock().push(thread_id);
+        
         thread_id
     }
     
-    /// Allocate a port for this task
-    pub fn allocate_port(&self) -> Arc<Port> {
-        let port = Port::new(self.id);
-        self.ports.lock().ports.push(port.clone());
-        port
+    pub fn allocate_port(&self) -> PortName { // Return PortName, not Arc<Port>
+        // In Mach, allocating a port gives you a new unique port name (PortId equivalent)
+        // and transfers the receive right to the task.
+        let port_name = PortName::new();
+        self.ports.lock().push(port_name); // Add to task's owned port names
+        port_name
     }
-    
-    /// Add port rights
-    pub fn add_port_rights(&self, port_id: PortId, rights: PortRights) {
-        self.ports.lock().rights.push((port_id, rights));
+
+    pub fn destroy_port(&self, port_name: PortName) {
+        let mut ports = self.ports.lock();
+        ports.retain(|&name| name != port_name);
+        // TODO: Invalidate port globally and release resources associated with it.
     }
 }
 
 /// Global task management
 pub struct TaskManager {
-    /// All tasks in the system
     tasks: Mutex<Vec<Arc<Task>>>,
-    /// Kernel task (task 0)
     kernel_task: Option<Arc<Task>>,
 }
 
 impl TaskManager {
-    /// Create a new task manager
     pub const fn new() -> Self {
         TaskManager {
             tasks: Mutex::new(Vec::new()),
@@ -183,55 +269,57 @@ impl TaskManager {
         }
     }
     
-    /// Create the kernel task
-    pub fn create_kernel_task(&mut self) -> Arc<Task> {
-        let kernel_task = Task::new();
+    pub fn create_kernel_task(&mut self, name: String) -> Arc<Task> {
+        let kernel_task = Task::new(name);
         self.kernel_task = Some(kernel_task.clone());
         self.tasks.lock().push(kernel_task.clone());
         kernel_task
     }
     
-    /// Create a new user task
-    pub fn create_task(&self) -> Arc<Task> {
-        let task = Task::new();
+    pub fn create_task(&self, name: String) -> Arc<Task> {
+        let task = Task::new(name);
         self.tasks.lock().push(task.clone());
         task
     }
     
-    /// Get a task by ID
     pub fn get_task(&self, id: TaskId) -> Option<Arc<Task>> {
         self.tasks.lock()
             .iter()
-            .find(|t| t.id() == id)
+            .find(|t| t.id == id)
             .cloned()
     }
     
-    /// Destroy a task (move to terminated state and cleanup)
     pub fn destroy_task(&self, id: TaskId) {
         let mut tasks = self.tasks.lock();
-        if let Some(task) = tasks.iter().find(|t| t.id() == id) {
-            task.set_state(TaskState::Terminated);
+        if let Some(pos) = tasks.iter().position(|t| t.id == id) {
+            let task = tasks.remove(pos);
+            task.terminate(); // Terminate the task and its threads
+            // TODO: Clean up VM map, ports, etc.
         }
-        // Remove terminated tasks from the list
-        tasks.retain(|t| t.state() != TaskState::Terminated);
     }
 }
 
-/// Global task manager instance
-static mut TASK_MANAGER: TaskManager = TaskManager::new();
+static TASK_MANAGER: Once<TaskManager> = Once::new();
 
-/// Initialize task management
-pub fn init() {
-    unsafe {
-        // Create the kernel task
-        let task_manager = &mut *core::ptr::addr_of_mut!(TASK_MANAGER);
-        task_manager.create_kernel_task();
-    }
+pub fn init(kernel_task_name: String) {
+    TASK_MANAGER.call_once(|| {
+        let mut manager = TaskManager::new();
+        manager.create_kernel_task(kernel_task_name);
+        manager
+    });
 }
 
-/// Get the global task manager
 pub fn manager() -> &'static TaskManager {
-    unsafe { &*core::ptr::addr_of!(TASK_MANAGER) }
+    TASK_MANAGER.get().expect("Task Manager not initialized")
+}
+
+// Global functions for creating tasks/threads from outside task module
+pub fn create_task(name: String) -> Arc<Task> {
+    manager().create_task(name)
+}
+
+pub fn create_thread(task: &Arc<Task>, entry: usize, stack_size: usize, name: String) -> ThreadId {
+    task.create_thread(entry, stack_size, name)
 }
 
 #[cfg(test)]
@@ -240,23 +328,23 @@ mod tests {
     
     #[test]
     fn test_task_creation() {
-        let task = Task::new();
+        let task = Task::new(String::from("test_task")); // Update
         assert_eq!(task.state(), TaskState::Running);
     }
     
     #[test]
     fn test_thread_creation() {
-        let task = Task::new();
-        let thread_id = task.create_thread();
+        let task = Task::new(String::from("test_task")); // Update
+        let thread_id = task.create_thread(0, 0, String::from("test_thread")); // Update
         
         let threads = task.threads.lock();
         assert_eq!(threads.len(), 1);
-        assert_eq!(threads[0].id, thread_id);
+        assert_eq!(threads[0], thread_id); // threads now stores ThreadId
     }
     
     #[test]
     fn test_task_state_transitions() {
-        let task = Task::new();
+        let task = Task::new(String::from("test_task")); // Update
         
         task.suspend();
         assert_eq!(task.state(), TaskState::Suspended);

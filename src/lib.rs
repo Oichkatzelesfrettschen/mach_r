@@ -6,6 +6,8 @@
 #![no_std]
 #![cfg_attr(not(test), no_main)]
 #![allow(dead_code)] // TODO: Remove once all features are implemented
+
+
 // #![feature(alloc_error_handler)] // Only on nightly
 
 // Standard library replacement for no_std
@@ -16,6 +18,8 @@ pub mod types;
 
 // Re-exports
 pub mod console;
+pub mod panic;
+pub mod ipc;
 pub mod memory;
 pub mod port;
 pub mod message;
@@ -44,7 +48,7 @@ pub mod vm;
 
 // System components
 pub mod shell;
-pub mod build;
+// pub mod build;
 pub mod coreutils;
 
 // Boot components
@@ -84,9 +88,9 @@ pub fn init() {
         // Handle shell initialization error
     }
 
-    if let Err(_e) = build::init() {
+    // if let Err(_e) = build::init() {
         // Handle build system initialization error
-    }
+    // }
 
     if let Err(_e) = coreutils::init() {
         // Handle coreutils initialization error

@@ -1,5 +1,5 @@
 /* Linker script for ARM64 QEMU virt machine */
-ENTRY(_boot)
+ENTRY(_start)
 
 SECTIONS
 {

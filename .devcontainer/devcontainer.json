@@ -1,0 +1,24 @@
+{
+    "name": "mach_r-dev",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "context": ".."
+    },
+    "customizations": {
+        "vscode": {
+            "settings": {
+                "rust-analyzer.checkOnSave.command": "clippy",
+                "rust-analyzer.cargo.target": "x86_64-unknown-none"
+            },
+            "extensions": [
+                "rust-lang.rust-analyzer",
+                "serayuzgur.crates",
+                "tamasfe.even-better-toml",
+                "ms-vscode.cpptools",
+                "ms-vscode.cmake-tools"
+            ]
+        }
+    },
+    "postCreateCommand": "rustup target add x86_64-unknown-none && rustup target add aarch64-unknown-none && cargo install cross",
+    "remoteUser": "root"
+}

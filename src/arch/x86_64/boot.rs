@@ -87,9 +87,8 @@ global_asm!(
 global_asm!(
     ".section .text",
     ".code32",                                 // Start in 32-bit mode
-
-    ".global _start",
-    "_start:",
+    ".global _start_s",
+    "_start_s:",
     "    # Bootloader (GRUB2) loads us here in 32-bit protected mode",
     "    # EAX contains Multiboot2 magic number",
     "    # EBX contains physical address of Multiboot2 information structure",

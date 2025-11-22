@@ -1,7 +1,7 @@
 //! Pure Rust bootloader for Mach_R
 //! ARM64/AArch64 bootloader with UEFI support
 
-use core::arch::global_asm;
+
 
 pub mod uefi;
 pub mod multiboot;
@@ -241,7 +241,7 @@ pub fn boot_kernel(config: BootloaderConfig) -> ! {
             boot_time: 0, // TODO: Get actual time
         });
         
-        let boot_info = unsafe { (*core::ptr::addr_of!(BOOT_INFO_STORAGE)).as_ref().unwrap() };
+        let boot_info = (*core::ptr::addr_of!(BOOT_INFO_STORAGE)).as_ref().unwrap();
         
         serial_println("Jumping to kernel...");
         
@@ -256,7 +256,7 @@ pub fn boot_kernel(config: BootloaderConfig) -> ! {
 }
 
 /// Architecture-specific initialization
-fn arch_init() {
+pub fn arch_init() {
     #[cfg(target_arch = "aarch64")]
     {
         trampoline::ensure_el1();
@@ -267,7 +267,7 @@ fn arch_init() {
     {
         match x86_64::init_x86_64() {
             Ok(_) => serial_println("x86_64: Initialization complete"),
-            Err(e) => {
+            Err(_e) => {
                 serial_println("x86_64: Initialization failed");
                 panic_halt();
             }
@@ -394,7 +394,7 @@ fn arch_jump_to_kernel(
     kernel_entry: u64,
     stack_top: u64,
     boot_info: &'static BootInfo,
-    page_table_addr: u64,
+    _page_table_addr: u64,
 ) -> ! {
     #[cfg(target_arch = "aarch64")]
     {
@@ -419,7 +419,7 @@ fn arch_jump_to_kernel(
 
 /// Set up ARM64 page tables for higher half kernel
 #[cfg(target_arch = "aarch64")]
-fn setup_page_tables_arm64(memory_map: &[MemoryMapEntry], kernel_load_addr: u64) -> u64 {
+fn setup_page_tables_arm64(_memory_map: &[MemoryMapEntry], kernel_load_addr: u64) -> u64 {
     use paging::*;
     
     // Allocate root page table (this should be done with proper memory allocator)
@@ -428,12 +428,12 @@ fn setup_page_tables_arm64(memory_map: &[MemoryMapEntry], kernel_load_addr: u64)
     static mut TABLE_INDEX: usize = 0;
     
     unsafe {
-        let root_table = &mut ROOT_PAGE_TABLE;
+        let root_table = &mut *(&raw mut ROOT_PAGE_TABLE);
         let mut page_manager = PageTableManager::new(root_table);
         
         // Simple table allocator
         let allocate_table = || -> Option<&'static mut PageTable> {
-            if TABLE_INDEX < ALLOCATED_TABLES.len() {
+            if TABLE_INDEX < (&*(&raw const ALLOCATED_TABLES)).len() {
                 let table = &mut ALLOCATED_TABLES[TABLE_INDEX];
                 TABLE_INDEX += 1;
                 Some(table)
@@ -463,7 +463,7 @@ fn setup_page_tables_arm64(memory_map: &[MemoryMapEntry], kernel_load_addr: u64)
 
 /// Set up x86_64 page tables for higher half kernel
 #[cfg(target_arch = "x86_64")]
-fn setup_page_tables_x86_64(memory_map: &[MemoryMapEntry], kernel_load_addr: u64) -> u64 {
+fn setup_page_tables_x86_64(_memory_map: &[MemoryMapEntry], kernel_load_addr: u64) -> u64 {
     use x86_64::*;
     
     // Allocate PML4 (root page table)
@@ -505,7 +505,7 @@ fn setup_page_tables_generic(_memory_map: &[MemoryMapEntry], _kernel_load_addr: 
 }
 
 /// Initialize serial port for debug output (ARM64 PL011 UART)
-fn serial_init(port: u16) {
+fn serial_init(_port: u16) {
     unsafe {
         init_pl011_uart();
     }
@@ -554,7 +554,7 @@ fn panic_halt() -> ! {
 }
 
 /// UEFI boot main function called from UEFI protocol
-pub fn boot_main(image_handle: usize, system_table: usize) -> ! {
+pub fn boot_main(_image_handle: usize, _system_table: usize) -> ! {
     let config = BootloaderConfig::default();
     boot_kernel(config)
 }
@@ -566,143 +566,6 @@ pub extern "C" fn efi_main() -> ! {
     boot_kernel(config)
 }
 
-// Assembly stubs for low-level operations
-#[cfg(target_arch = "aarch64")]
-global_asm!(
-    r#"
-.text
-.global _start
-_start:
-    /* Boot entry point - UEFI calls this */
-    /* Set up minimal environment and jump to Rust */
-    
-    /* Ensure we're running on the boot processor */
-    mrs x0, mpidr_el1
-    and x0, x0, #0xFF
-    cbnz x0, 1f
-    
-    /* Set up initial stack (use high memory) */
-    mov x0, #0x90000
-    mov sp, x0
-    
-    /* Jump to Rust entry point */
-    bl efi_main
 
-1:  /* halt_secondary */
-    wfe
-    b 1b
-    
-.global setup_arm64_paging
-setup_arm64_paging:
-    /* x0 = virtual_base, x1 = physical_base */
-    /* TODO: Implement ARM64 page table setup */
-    /* For now, identity map everything (MMU disabled mode) */
-    
-    /* Disable MMU if enabled */
-    mrs x2, sctlr_el1
-    bic x2, x2, #1
-    msr sctlr_el1, x2
-    isb
-    
-    ret
-    
-.global init_pl011_uart
-init_pl011_uart:
-    /* Initialize PL011 UART at base address 0x09000000 */
-    mov x0, #0x09000000
-    
-    /* Disable UART */
-    str wzr, [x0, #0x30]  /* UARTCR = 0 */
-    
-    /* Clear any pending errors */
-    str wzr, [x0, #0x04]  /* UARTDR error clear */
-    
-    /* Set baud rate (115200 @ 24MHz clock) */
-    mov w1, #13           /* IBRD */
-    str w1, [x0, #0x24]   /* UARTIBRD */
-    mov w1, #1            /* FBRD */
-    str w1, [x0, #0x28]   /* UARTFBRD */
-    
-    /* Set line control: 8N1 */
-    mov w1, #0x70         /* 8-bit, no parity, 1 stop bit, FIFOs enabled */
-    str w1, [x0, #0x2C]   /* UARTLCR_H */
-    
-    /* Enable UART: TXE, RXE, UARTEN */
-    mov w1, #0x301
-    str w1, [x0, #0x30]   /* UARTCR */
-    
-    ret
-    
-.global uart_print_string
-uart_print_string:
-    /* x0 = string pointer, x1 = length */
-    cbz x1, 3f
-    mov x2, #0x09000000   /* UART base */
-    
-2:  /* uart_loop */
-    /* Wait for TX FIFO not full */
-1:  /* uart_wait */
-    ldr w3, [x2, #0x18]   /* UARTFR */
-    tst w3, #0x20         /* TXFF bit */
-    b.ne 1b
-    
-    /* Send character */
-    ldrb w3, [x0], #1
-    str w3, [x2, #0x00]   /* UARTDR */
-    
-    subs x1, x1, #1
-    b.ne 2b
-    
-3:  /* uart_done */
-    ret
-    
-.global jump_to_kernel_asm
-jump_to_kernel_asm:
-    /* x0 = entry point, x1 = stack pointer, x2 = boot info pointer */
-    
-    /* Set up stack pointer */
-    mov sp, x1
-    
-    /* Set up registers for kernel entry */
-    mov x0, x2        /* First argument: boot info pointer */
-    mov x1, xzr       /* Second argument: reserved (0) */
-    mov x2, xzr       /* Third argument: reserved (0) */
-    mov x3, xzr       /* Fourth argument: reserved (0) */
-    
-    /* Clear other registers */
-    mov x4, xzr
-    mov x5, xzr
-    mov x6, xzr
-    mov x7, xzr
-    
-    /* Jump to kernel entry point */
-    br x0
-    
-    /* Should never reach here */
-1:  /* kernel_return */
-    b 1b
-    "#
-);
 
-// x86_64 assembly stubs - minimal implementation
-#[cfg(target_arch = "x86_64")]
-global_asm!(
-    r#"
-.text
-.global _start
-_start:
-    /* Simple x86_64 entry */
-    mov rsp, 0x90000
-    call efi_main
-1:  hlt
-    jmp 1b
 
-.global setup_x86_64_paging
-setup_x86_64_paging:
-    ret
-    
-.global jump_to_kernel_asm
-jump_to_kernel_asm:
-    ret
-    "#
-);

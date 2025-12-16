@@ -6,22 +6,19 @@
 //! - Routine analysis and numbering
 //! - Semantic validation and error reporting
 
-pub mod types;
-pub mod layout;
 pub mod analyzer;
+pub mod layout;
+pub mod types;
 
-pub use types::{TypeResolver, ResolvedType, MachMsgType};
+pub use analyzer::{AnalyzedRoutine, AnalyzedSubsystem, SemanticAnalyzer};
 pub use layout::{MessageLayout, MessageLayoutCalculator};
-pub use analyzer::{SemanticAnalyzer, AnalyzedSubsystem, AnalyzedRoutine};
+pub use types::{MachMsgType, ResolvedType, TypeResolver};
 
 /// Semantic analysis errors
 #[derive(Debug, Clone)]
 pub enum SemanticError {
     /// Undefined type reference
-    UndefinedType {
-        name: String,
-        location: String,
-    },
+    UndefinedType { name: String, location: String },
     /// Type mismatch
     TypeMismatch {
         expected: String,
@@ -29,10 +26,7 @@ pub enum SemanticError {
         location: String,
     },
     /// Invalid array bounds
-    InvalidArrayBounds {
-        routine: String,
-        argument: String,
-    },
+    InvalidArrayBounds { routine: String, argument: String },
     /// Message too large
     MessageTooLarge {
         routine: String,
@@ -59,20 +53,52 @@ impl std::fmt::Display for SemanticError {
             SemanticError::UndefinedType { name, location } => {
                 write!(f, "Undefined type '{}' at {}", name, location)
             }
-            SemanticError::TypeMismatch { expected, found, location } => {
-                write!(f, "Type mismatch at {}: expected '{}', found '{}'", location, expected, found)
+            SemanticError::TypeMismatch {
+                expected,
+                found,
+                location,
+            } => {
+                write!(
+                    f,
+                    "Type mismatch at {}: expected '{}', found '{}'",
+                    location, expected, found
+                )
             }
             SemanticError::InvalidArrayBounds { routine, argument } => {
-                write!(f, "Invalid array bounds in routine '{}', argument '{}'", routine, argument)
+                write!(
+                    f,
+                    "Invalid array bounds in routine '{}', argument '{}'",
+                    routine, argument
+                )
             }
             SemanticError::MessageTooLarge { routine, size, max } => {
-                write!(f, "Message too large in routine '{}': {} bytes (max {})", routine, size, max)
+                write!(
+                    f,
+                    "Message too large in routine '{}': {} bytes (max {})",
+                    routine, size, max
+                )
             }
-            SemanticError::DuplicateRoutineNumber { routine1, routine2, number } => {
-                write!(f, "Duplicate routine number {}: '{}' and '{}'", number, routine1, routine2)
+            SemanticError::DuplicateRoutineNumber {
+                routine1,
+                routine2,
+                number,
+            } => {
+                write!(
+                    f,
+                    "Duplicate routine number {}: '{}' and '{}'",
+                    number, routine1, routine2
+                )
             }
-            SemanticError::InvalidPortDisposition { routine, argument, reason } => {
-                write!(f, "Invalid port disposition in routine '{}', argument '{}': {}", routine, argument, reason)
+            SemanticError::InvalidPortDisposition {
+                routine,
+                argument,
+                reason,
+            } => {
+                write!(
+                    f,
+                    "Invalid port disposition in routine '{}', argument '{}': {}",
+                    routine, argument, reason
+                )
             }
         }
     }

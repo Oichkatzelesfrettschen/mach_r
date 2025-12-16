@@ -3,7 +3,7 @@
 
 #![cfg(target_arch = "aarch64")]
 
-use super::{BootInfo, paging::KERNEL_VIRTUAL_BASE};
+use super::{paging::KERNEL_VIRTUAL_BASE, BootInfo};
 
 /// Kernel entry point signature
 pub type KernelEntryPoint = extern "C" fn(boot_info: &'static BootInfo) -> !;
@@ -24,14 +24,14 @@ pub struct TrampolineParams {
 fn boot_trampoline_impl(params: *const TrampolineParams) -> ! {
     unsafe {
         let params = &*params;
-        
+
         // Setup basic MMU and jump to kernel
         // This is a simplified version - full implementation would setup page tables
-        
+
         // For now, just jump directly to kernel entry point
-        let kernel_entry: extern "C" fn(&'static BootInfo) -> ! = 
+        let kernel_entry: extern "C" fn(&'static BootInfo) -> ! =
             core::mem::transmute(params.kernel_entry);
-            
+
         let boot_info = &*(params.boot_info as *const BootInfo);
         kernel_entry(boot_info);
     }
@@ -50,7 +50,7 @@ pub fn execute_trampoline(
         boot_info: boot_info as *const _ as u64,
         page_table,
     };
-    
+
     boot_trampoline_impl(&params);
 }
 
@@ -96,15 +96,15 @@ pub fn ensure_el1() {
 pub fn prepare_kernel_handoff() {
     // Ensure we're in EL1
     ensure_el1();
-    
+
     // Set up basic identity mapping
     setup_identity_mapping();
-    
+
     // Flush any pending operations
     unsafe {
         core::arch::asm!(
-            "dsb sy",    // Data synchronization barrier
-            "isb"        // Instruction synchronization barrier
+            "dsb sy", // Data synchronization barrier
+            "isb"     // Instruction synchronization barrier
         );
     }
 }
@@ -120,39 +120,39 @@ pub mod cache {
     pub fn clean_and_invalidate_dcache() {
         unsafe {
             core::arch::asm!(
-                "ic ialluis",    // Invalidate instruction cache
-                "dc cisw, xzr",  // Clean and invalidate data cache
-                "dsb sy",        // Data synchronization barrier
-                "isb"            // Instruction synchronization barrier
+                "ic ialluis",   // Invalidate instruction cache
+                "dc cisw, xzr", // Clean and invalidate data cache
+                "dsb sy",       // Data synchronization barrier
+                "isb"           // Instruction synchronization barrier
             );
         }
     }
-    
+
     /// Invalidate instruction cache
     pub fn invalidate_icache() {
         unsafe {
             core::arch::asm!(
-                "ic ialluis",    // Invalidate all instruction cache
+                "ic ialluis", // Invalidate all instruction cache
                 "dsb sy",
                 "isb"
             );
         }
     }
-    
+
     /// Data memory barrier
     pub fn data_memory_barrier() {
         unsafe {
             core::arch::asm!("dmb sy");
         }
     }
-    
+
     /// Data synchronization barrier
     pub fn data_sync_barrier() {
         unsafe {
             core::arch::asm!("dsb sy");
         }
     }
-    
+
     /// Instruction synchronization barrier
     pub fn instruction_sync_barrier() {
         unsafe {
@@ -171,7 +171,7 @@ pub mod sysreg {
         }
         value
     }
-    
+
     /// Read MPIDR_EL1 (Multiprocessor Affinity Register)  
     pub fn read_mpidr() -> u64 {
         let mut value: u64;
@@ -180,7 +180,7 @@ pub mod sysreg {
         }
         value
     }
-    
+
     /// Read ID_AA64MMFR0_EL1 (Memory Model Feature Register 0)
     pub fn read_id_aa64mmfr0() -> u64 {
         let mut value: u64;
@@ -189,12 +189,18 @@ pub mod sysreg {
         }
         value
     }
-    
+
     /// Set vector table base address
+    ///
+    /// # Safety
+    ///
+    /// - `addr` must point to a valid AArch64 exception vector table
+    /// - The vector table must be properly aligned (2KB boundary)
+    /// - Must be called from EL1 or higher
     pub unsafe fn set_vbar_el1(addr: u64) {
         core::arch::asm!("msr vbar_el1, {}", in(reg) addr);
     }
-    
+
     /// Get stack pointer
     pub fn read_sp() -> u64 {
         let mut sp: u64;

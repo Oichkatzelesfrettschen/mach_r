@@ -31,10 +31,7 @@ pub enum ParseError {
     UnexpectedEof,
 
     #[error("expected {expected}, found {found}")]
-    UnexpectedToken {
-        expected: String,
-        found: String,
-    },
+    UnexpectedToken { expected: String, found: String },
 
     #[error("undefined type: {0}")]
     UndefinedType(String),
@@ -78,34 +75,22 @@ pub enum SemanticError {
     UndefinedType(String),
 
     #[error("type mismatch: expected {expected}, found {actual}")]
-    TypeMismatch {
-        expected: String,
-        actual: String,
-    },
+    TypeMismatch { expected: String, actual: String },
 
     #[error("array size must be specified for type {0}")]
     MissingArraySize(String),
 
     #[error("array size too large: {size} > {max}")]
-    ArrayTooLarge {
-        size: u32,
-        max: u32,
-    },
+    ArrayTooLarge { size: u32, max: u32 },
 
     #[error("invalid port disposition: {0}")]
     InvalidPortDisposition(String),
 
     #[error("message layout exceeds maximum size: {size} > {max}")]
-    MessageTooLarge {
-        size: usize,
-        max: usize,
-    },
+    MessageTooLarge { size: usize, max: usize },
 
     #[error("invalid direction for argument {name}: {direction}")]
-    InvalidDirection {
-        name: String,
-        direction: String,
-    },
+    InvalidDirection { name: String, direction: String },
 }
 
 /// Code generation errors

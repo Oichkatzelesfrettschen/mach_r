@@ -1,5 +1,4 @@
 /// Rust code generator for modern type-safe IPC
-
 use super::{CodeGenerator, CodegenError};
 use crate::parser::ast::*;
 

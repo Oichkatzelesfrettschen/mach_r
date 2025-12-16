@@ -6,8 +6,8 @@
 
 mod proptest_strategies;
 
-use mig_rust::*;
 use mig_rust::codegen::rust_stubs::RustStubGenerator;
+use mig_rust::*;
 use proptest::prelude::*;
 use proptest_strategies::*;
 

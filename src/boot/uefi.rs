@@ -1,7 +1,9 @@
 //! UEFI boot protocol implementation
 //! ARM64 UEFI support for Mach_R bootloader
 
-use crate::boot::{BootProtocol, BootError, MemoryMapEntry, MemoryType, FramebufferInfo, BootloaderConfig};
+use crate::boot::{
+    BootError, BootProtocol, BootloaderConfig, FramebufferInfo, MemoryMapEntry, MemoryType,
+};
 
 /// UEFI System Table (simplified)
 #[repr(C)]
@@ -108,8 +110,16 @@ pub struct EfiBootServices {
         notify_context: *const (),
         event: *mut EfiEvent,
     ) -> EfiStatus,
-    pub set_timer: extern "efiapi" fn(event: EfiEvent, timer_type: EfiTimerDelay, trigger_time: u64) -> EfiStatus,
-    pub wait_for_event: extern "efiapi" fn(number_of_events: usize, event: *const EfiEvent, index: *mut usize) -> EfiStatus,
+    pub set_timer: extern "efiapi" fn(
+        event: EfiEvent,
+        timer_type: EfiTimerDelay,
+        trigger_time: u64,
+    ) -> EfiStatus,
+    pub wait_for_event: extern "efiapi" fn(
+        number_of_events: usize,
+        event: *const EfiEvent,
+        index: *mut usize,
+    ) -> EfiStatus,
     pub signal_event: extern "efiapi" fn(event: EfiEvent) -> EfiStatus,
     pub close_event: extern "efiapi" fn(event: EfiEvent) -> EfiStatus,
     pub check_event: extern "efiapi" fn(event: EfiEvent) -> EfiStatus,
@@ -154,10 +164,8 @@ pub struct EfiBootServices {
         device_path: *mut *const EfiDevicePathProtocol,
         device: *mut EfiHandle,
     ) -> EfiStatus,
-    pub install_configuration_table: extern "efiapi" fn(
-        guid: *const EfiGuid,
-        table: *const (),
-    ) -> EfiStatus,
+    pub install_configuration_table:
+        extern "efiapi" fn(guid: *const EfiGuid, table: *const ()) -> EfiStatus,
     // Image Services
     pub load_image: extern "efiapi" fn(
         boot_policy: bool,
@@ -179,7 +187,8 @@ pub struct EfiBootServices {
         exit_data: *const u16,
     ) -> !,
     pub unload_image: extern "efiapi" fn(image_handle: EfiHandle) -> EfiStatus,
-    pub exit_boot_services: extern "efiapi" fn(image_handle: EfiHandle, map_key: usize) -> EfiStatus,
+    pub exit_boot_services:
+        extern "efiapi" fn(image_handle: EfiHandle, map_key: usize) -> EfiStatus,
     // Miscellaneous Services
     pub get_next_monotonic_count: extern "efiapi" fn(count: *mut u64) -> EfiStatus,
     pub stall: extern "efiapi" fn(microseconds: usize) -> EfiStatus,
@@ -240,14 +249,11 @@ pub struct EfiBootServices {
         registration: *const (),
         interface: *mut *const (),
     ) -> EfiStatus,
-    pub install_multiple_protocol_interfaces: *const (),  // Placeholder for variadic function
-    pub uninstall_multiple_protocol_interfaces: *const (),  // Placeholder for variadic function
+    pub install_multiple_protocol_interfaces: *const (), // Placeholder for variadic function
+    pub uninstall_multiple_protocol_interfaces: *const (), // Placeholder for variadic function
     // 32-bit CRC Services
-    pub calculate_crc32: extern "efiapi" fn(
-        data: *const u8,
-        data_size: usize,
-        crc32: *mut u32,
-    ) -> EfiStatus,
+    pub calculate_crc32:
+        extern "efiapi" fn(data: *const u8, data_size: usize, crc32: *mut u32) -> EfiStatus,
     // Miscellaneous Services
     pub copy_mem: extern "efiapi" fn(destination: *mut u8, source: *const u8, length: usize),
     pub set_mem: extern "efiapi" fn(buffer: *mut u8, size: usize, value: u8),
@@ -266,13 +272,11 @@ pub struct EfiBootServices {
 pub struct EfiRuntimeServices {
     pub hdr: EfiTableHeader,
     // Time Services
-    pub get_time: extern "efiapi" fn(time: *mut EfiTime, capabilities: *mut EfiTimeCapabilities) -> EfiStatus,
+    pub get_time:
+        extern "efiapi" fn(time: *mut EfiTime, capabilities: *mut EfiTimeCapabilities) -> EfiStatus,
     pub set_time: extern "efiapi" fn(time: *const EfiTime) -> EfiStatus,
-    pub get_wakeup_time: extern "efiapi" fn(
-        enabled: *mut bool,
-        pending: *mut bool,
-        time: *mut EfiTime,
-    ) -> EfiStatus,
+    pub get_wakeup_time:
+        extern "efiapi" fn(enabled: *mut bool, pending: *mut bool, time: *mut EfiTime) -> EfiStatus,
     pub set_wakeup_time: extern "efiapi" fn(enable: bool, time: *const EfiTime) -> EfiStatus,
     // Virtual Memory Services
     pub set_virtual_address_map: extern "efiapi" fn(
@@ -281,7 +285,8 @@ pub struct EfiRuntimeServices {
         descriptor_version: u32,
         virtual_map: *const EfiMemoryDescriptor,
     ) -> EfiStatus,
-    pub convert_pointer: extern "efiapi" fn(debug_disposition: usize, address: *mut *const ()) -> EfiStatus,
+    pub convert_pointer:
+        extern "efiapi" fn(debug_disposition: usize, address: *mut *const ()) -> EfiStatus,
     // Variable Services
     pub get_variable: extern "efiapi" fn(
         variable_name: *const u16,
@@ -470,20 +475,16 @@ pub struct EfiSimpleTextOutputProtocol {
         this: *const EfiSimpleTextOutputProtocol,
         mode_number: usize,
     ) -> EfiStatus,
-    pub set_attribute: extern "efiapi" fn(
-        this: *const EfiSimpleTextOutputProtocol,
-        attribute: usize,
-    ) -> EfiStatus,
+    pub set_attribute:
+        extern "efiapi" fn(this: *const EfiSimpleTextOutputProtocol, attribute: usize) -> EfiStatus,
     pub clear_screen: extern "efiapi" fn(this: *const EfiSimpleTextOutputProtocol) -> EfiStatus,
     pub set_cursor_position: extern "efiapi" fn(
         this: *const EfiSimpleTextOutputProtocol,
         column: usize,
         row: usize,
     ) -> EfiStatus,
-    pub enable_cursor: extern "efiapi" fn(
-        this: *const EfiSimpleTextOutputProtocol,
-        visible: bool,
-    ) -> EfiStatus,
+    pub enable_cursor:
+        extern "efiapi" fn(this: *const EfiSimpleTextOutputProtocol, visible: bool) -> EfiStatus,
     pub mode: *const EfiSimpleTextOutputMode,
 }
 
@@ -517,17 +518,24 @@ impl UefiProtocol {
         // For now, return error indicating we need proper UEFI environment
         Err(BootError::UefiError("UEFI system table not available"))
     }
-    
+
     /// Initialize from existing system table pointer
-    pub unsafe fn from_system_table(system_table: *const EfiSystemTable) -> Result<Self, BootError> {
+    ///
+    /// # Safety
+    ///
+    /// - `system_table` must point to a valid EFI System Table
+    /// - The table must remain valid for the lifetime of the returned `UefiBootServices`
+    pub unsafe fn from_system_table(
+        system_table: *const EfiSystemTable,
+    ) -> Result<Self, BootError> {
         if system_table.is_null() {
             return Err(BootError::UefiError("Null system table"));
         }
-        
+
         let system_table = &*system_table;
         let boot_services = &*system_table.boot_services;
         let runtime_services = &*system_table.runtime_services;
-        
+
         Ok(Self {
             system_table,
             boot_services,
@@ -540,24 +548,24 @@ impl BootProtocol for UefiProtocol {
     fn init() -> Result<Self, BootError> {
         Self::init()
     }
-    
+
     fn get_memory_map(&self) -> Result<&[MemoryMapEntry], BootError> {
         // TODO: Get actual UEFI memory map
         // This would call boot_services.get_memory_map
         Err(BootError::UefiError("Memory map not implemented"))
     }
-    
+
     fn exit_boot_services(&mut self) -> Result<(), BootError> {
         // TODO: Call actual UEFI exit_boot_services
         // This is the point of no return - after this, only runtime services work
         Ok(())
     }
-    
+
     fn setup_graphics(&mut self, config: &BootloaderConfig) -> Result<FramebufferInfo, BootError> {
         if !config.enable_graphics {
             return Err(BootError::GraphicsError);
         }
-        
+
         // TODO: Set up graphics mode using UEFI GOP (Graphics Output Protocol)
         // For now, return a dummy framebuffer
         Ok(FramebufferInfo {
@@ -575,13 +583,13 @@ impl BootProtocol for UefiProtocol {
             blue_mask_shift: 0,
         })
     }
-    
+
     fn get_device_tree(&self) -> Result<Option<*const u8>, BootError> {
         // TODO: Get device tree from UEFI configuration tables
         // Look for device tree GUID in configuration table
         Ok(None)
     }
-    
+
     fn allocate_kernel_memory(&mut self, size: u64) -> Result<u64, BootError> {
         // TODO: Allocate memory using UEFI boot services
         // This would call boot_services.allocate_pages
@@ -601,12 +609,18 @@ fn convert_memory_type(uefi_type: EfiMemoryType) -> MemoryType {
     match uefi_type {
         EfiMemoryType::EfiConventionalMemory => MemoryType::Available,
         EfiMemoryType::EfiLoaderCode | EfiMemoryType::EfiLoaderData => MemoryType::Bootloader,
-        EfiMemoryType::EfiBootServicesCode | EfiMemoryType::EfiBootServicesData => MemoryType::Bootloader,
-        EfiMemoryType::EfiRuntimeServicesCode | EfiMemoryType::EfiRuntimeServicesData => MemoryType::Firmware,
+        EfiMemoryType::EfiBootServicesCode | EfiMemoryType::EfiBootServicesData => {
+            MemoryType::Bootloader
+        }
+        EfiMemoryType::EfiRuntimeServicesCode | EfiMemoryType::EfiRuntimeServicesData => {
+            MemoryType::Firmware
+        }
         EfiMemoryType::EfiACPIReclaimMemory => MemoryType::AcpiReclaimable,
         EfiMemoryType::EfiACPIMemoryNVS => MemoryType::AcpiNvs,
         EfiMemoryType::EfiUnusableMemory => MemoryType::BadMemory,
-        EfiMemoryType::EfiMemoryMappedIO | EfiMemoryType::EfiMemoryMappedIOPortSpace => MemoryType::Device,
+        EfiMemoryType::EfiMemoryMappedIO | EfiMemoryType::EfiMemoryMappedIOPortSpace => {
+            MemoryType::Device
+        }
         _ => MemoryType::Reserved,
     }
 }

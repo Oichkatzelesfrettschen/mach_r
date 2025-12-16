@@ -8,232 +8,128 @@ A pure Rust reimplementation of the Mach microkernel, bringing classic microkern
 
 ## Overview
 
-Mach_R is a research and development project that modernizes the foundational Mach microkernel design using Rust. By leveraging Rust's safety guarantees and zero-cost abstractions, Mach_R eliminates entire classes of bugs that plagued the original C implementation while preserving the elegant port-based IPC architecture that made Mach revolutionary.
+Mach_R modernizes the foundational Mach microkernel design using Rust. By leveraging Rust's safety guarantees and zero-cost abstractions, Mach_R eliminates entire classes of bugs that plagued the original C implementation while preserving the elegant port-based IPC architecture that made Mach revolutionary.
 
 ### Key Features
 
 - **Pure Rust Implementation** - Memory-safe microkernel with no unsafe C dependencies
 - **Port-Based IPC** - Message-passing communication preserving original Mach semantics
 - **Multi-Architecture** - Support for ARM64 (AArch64) and x86_64 architectures
-- **Modern Tooling** - Built with Cargo, comprehensive testing, and clean-room design
+- **Modern Tooling** - Built with Cargo xtask, comprehensive testing, and clean-room design
 - **MIG Code Generation** - Pure Rust implementation of Mach Interface Generator
-- **External Pagers** - User-space memory management with async Rust patterns
 
 ### Project Status
 
 **Current State:** Active development - core IPC and task management implemented
 
-- ✅ Port abstraction with capability-based security
-- ✅ Message passing system with inline/out-of-line data
-- ✅ Task and thread management
-- ✅ Basic memory allocation and VM foundations
-- ✅ MIG-rust code generator for interface definitions
-- 🚧 Scheduler implementation (in progress)
-- 🚧 External pager framework (in progress)
-- 📋 POSIX compatibility layer (planned)
-- 📋 Personality servers (BSD, SysV) (planned)
+- Port abstraction with capability-based security
+- Message passing system with inline/out-of-line data
+- Task and thread management (`kern/` subsystem)
+- Mach VM subsystem (`mach_vm/`)
+- MIG-rust code generator for interface definitions
+- Boot infrastructure (Multiboot2, UEFI, Device Tree)
 
-See [ROADMAP.md](ROADMAP.md) for detailed development timeline and [docs/project/status.md](docs/project/status.md) for current implementation status.
+See [TODO.md](TODO.md) for implementation checklist and [docs/book/](docs/book/) for documentation.
 
 ## Quick Start
 
 ### Prerequisites
 
-- **Docker:** For running the development container.
-- **VS Code with Dev Containers extension:** For the best development experience.
+- Rust 1.70+ with `cargo`
+- Docker (optional, for dev container)
+- QEMU (for running the kernel)
 
-### Getting Started
+### Building
 
-1.  **Clone the repository:**
-    ```bash
-    git clone https://github.com/YOUR_USERNAME/Synthesis.git
-    cd Synthesis
-    ```
-2.  **Open in Dev Container:**
-    *   Open the project in VS Code.
-    *   When prompted, click "Reopen in Container". This will build the Docker image and set up the development environment.
-3.  **Build the kernel:**
-    ```bash
-    # Build for x86_64
-    cargo xtask kernel --target x86_64
+```bash
+# Build the kernel (AArch64)
+cargo xtask kernel
 
-    # Build for aarch64
-    cargo xtask kernel --target aarch64
-    ```
+# Build for x86_64
+cargo xtask kernel --target x86_64
 
-## Architecture
+# Run in QEMU
+cargo xtask qemu
 
-Mach_R follows the classic microkernel architecture with minimal kernel services and user-space servers:
+# Run tests
+cargo xtask test
 
+# Full check (fmt, clippy, test)
+cargo xtask check
+
+# See all commands
+cargo xtask help
 ```
-┌─────────────────────────────────────────┐
-│          User Space                     │
-│  ┌──────────┐  ┌──────────┐            │
-│  │   Apps   │  │ Servers  │            │
-│  └────┬─────┘  └────┬─────┘            │
-│       └─────────────┘                   │
-│             IPC (Message Passing)       │
-├─────────────────────────────────────────┤
-│       Mach_R Microkernel                │
-│  ┌──────────┐ ┌──────────┐ ┌────────┐ │
-│  │   Port   │ │   Task   │ │   VM   │ │
-│  │   IPC    │ │  Thread  │ │ Memory │ │
-│  └──────────┘ └──────────┘ └────────┘ │
-└─────────────────────────────────────────┘
-```
-
-### Core Components
-
-- **Port System:** Unidirectional communication endpoints with capability-based security
-- **Message Passing:** Type-safe IPC with inline and out-of-line data transfer
-- **Task Management:** Resource allocation units with isolated address spaces
-- **Thread Management:** Execution contexts with priority scheduling
-- **Virtual Memory:** External pager support for user-space memory managers
-- **MIG Interface Generator:** Generate type-safe Rust client/server stubs from .defs files
-
-For detailed architecture documentation, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Project Structure
 
 ```
-Synthesis/
-├── src/                    # Mach_R kernel source
-│   ├── lib.rs              # Library entry point
-│   ├── port.rs             # Port and IPC implementation
-│   ├── message.rs          # Message passing system
-│   ├── task.rs             # Task management
-│   ├── memory.rs           # Memory allocation and VM
-│   ├── scheduler.rs        # Thread scheduler
-│   └── ...
+mach_r/
+├── src/                    # Kernel source (52K lines)
+│   ├── kern/              # Kernel primitives (threads, tasks, scheduling)
+│   ├── ipc/               # Mach IPC subsystem
+│   ├── mach_vm/           # Mach virtual memory
+│   ├── boot/              # Multi-architecture boot
+│   ├── arch/              # Architecture support (x86_64, aarch64)
+│   ├── drivers/           # Device drivers
+│   ├── servers/           # System servers
+│   └── mig/               # MIG generated stubs
 ├── tools/
-│   └── mig-rust/           # Mach Interface Generator (Rust)
-├── docs/                   # Documentation
-│   ├── INDEX.md            # Documentation index
-│   ├── architecture/       # Architectural documentation
-│   ├── development/        # Developer guides
-│   └── tools/              # Tool documentation
-├── real_os/                # Bootable OS implementation
-├── examples/               # Example programs
-├── tests/                  # Integration tests
-└── archive/                # Historical reference code
+│   └── mig-rust/          # Mach Interface Generator (Rust)
+├── xtask/                  # Build automation
+├── docs/
+│   ├── book/              # mdBook documentation
+│   └── specs/             # TLA+ specifications
+├── linkers/               # Linker scripts
+├── mig/specs/             # MIG interface definitions
+└── archive/               # Historical docs & research
 ```
 
 ## Documentation
 
-### Essential Reading
+| Document | Description |
+|----------|-------------|
+| [ARCHITECTURE.md](ARCHITECTURE.md) | System architecture |
+| [TODO.md](TODO.md) | Implementation checklist |
+| [AGENTS.md](AGENTS.md) | Development guidelines |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Contribution guide |
+| [docs/book/](docs/book/) | Full documentation |
 
-- **[ARCHITECTURE.md](ARCHITECTURE.md)** - System architecture and design principles
-- **[CONTRIBUTING.md](CONTRIBUTING.md)** - Contribution guidelines and code standards
-- **[ROADMAP.md](ROADMAP.md)** - Development roadmap and milestones
-- **[docs/INDEX.md](docs/INDEX.md)** - Complete documentation index
+## Architecture
 
-### Developer Guides
-
-- [Building and Testing](docs/development/building.md) - Build system and testing
-- [Debugging Guide](docs/development/debugging.md) - GDB and kernel debugging
-- [Adding Modules](docs/development/adding-modules.md) - Extending the kernel
-- [Clean Room Development](docs/development/clean-room.md) - Clean-room methodology
-
-### Architecture Deep Dives
-
-- [IPC System](docs/architecture/ipc-system.md) - Port semantics and message passing
-- [Memory Management](docs/architecture/memory-management.md) - VM and external pagers
-- [Task & Threading](docs/architecture/task-threading.md) - Task/thread model
-
-### Tools
-
-- [MIG User Guide](docs/tools/mig/usage.md) - Using the Mach Interface Generator
-- [MIG Design](docs/tools/mig/design.md) - MIG implementation details
-- [Disk Images](docs/tools/disk-images.md) - Creating bootable disk images
-
-## Development
-
-### Building and Running
-
-Mach_R uses `cargo xtask` for all build and run operations inside the devcontainer.
-
-```bash
-# List all available xtask commands
-cargo xtask help
-
-# Build the kernel (AArch64 release by default)
-cargo xtask kernel
-
-# Build kernel for x86_64 release
-cargo xtask kernel --target x86_64
-
-# Run the kernel in QEMU (AArch64 by default)
-cargo xtask qemu
-
-# Run x86_64 kernel in QEMU
-cargo xtask qemu --target x86_64
-
-# Build a bootable disk image (for x86_64, default size 128MB)
-cargo xtask disk-image --target x86_64
-
-# Build a bootable ISO image (for x86_64)
-cargo xtask iso-image --target x86_64
-
-# Run all tests
-cargo xtask test
-
-# Check code style, lints, and build (fmt-check, clippy, test)
-cargo xtask check
+```
++---------------------------------------+
+|          User Space                   |
+|  +----------+  +----------+           |
+|  |   Apps   |  | Servers  |           |
+|  +----+-----+  +----+-----+           |
+|       +-------------+                 |
+|         IPC (Message Passing)         |
++---------------------------------------+
+|       Mach_R Microkernel              |
+|  +--------+ +--------+ +--------+     |
+|  |  Port  | |  Task  | |   VM   |     |
+|  |  IPC   | | Thread | | Memory |     |
+|  +--------+ +--------+ +--------+     |
++---------------------------------------+
 ```
 
-### Running Tests
+### Core Subsystems
 
-```bash
-# Run all xtask tests
-cargo xtask test
-
-# Or directly using cargo:
-# Unit tests
-cargo test --lib
-
-# Integration tests
-cargo test --test '*'
-
-# Specific test
-cargo test port_creation
-```
-
-### Code Style
-
-Mach_R follows Rust standard style guidelines:
-
-```bash
-# Format code
-cargo xtask fmt
-
-# Run linter
-cargo xtask clippy
-
-# Check without building (fmt-check, clippy, test)
-cargo xtask check
-```
+- **kern/** - Kernel primitives: threads, tasks, scheduling, timers, locks
+- **ipc/** - Port-based IPC: messages, port sets, notifications, rights
+- **mach_vm/** - Virtual memory: pages, objects, maps, faults, external pagers
+- **boot/** - Multi-arch boot: Multiboot2, UEFI, Device Tree
+- **mig/** - Interface generator stubs
 
 ## Contributing
 
-We welcome contributions from the community! Whether you're fixing bugs, adding features, improving documentation, or helping with design discussions, your help is appreciated.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
-### How to Contribute
-
-1. **Read the guidelines:** See [CONTRIBUTING.md](CONTRIBUTING.md)
-2. **Find an issue:** Check open issues or propose new features
-3. **Fork and clone:** Fork the repository and create a feature branch
-4. **Make changes:** Follow code style and add tests
-5. **Submit PR:** Create a pull request with clear description
-
-### Areas We Need Help
-
-- 🐛 **Bug fixes** - Help identify and fix issues
-- ✨ **Features** - Implement planned features from the roadmap
-- 📚 **Documentation** - Improve docs, add examples, fix typos
-- 🧪 **Testing** - Expand test coverage and add integration tests
-- 🎨 **Design** - Contribute to architectural discussions
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
+```bash
+# Before submitting
+cargo xtask check
+```
 
 ## Historical Context
 
@@ -243,80 +139,16 @@ Mach_R draws inspiration from multiple historical Mach implementations:
 - **OSF/1 1.0** - Unix compatibility layers
 - **Lites 1.1** - BSD personality server design
 - **Mach 4 (i386)** - Real-time extensions
-- **GNU Mach** - Modern toolchain integration
 
-This project is a **clean-room reimplementation** using the published Mach papers and documentation as reference, not a direct port of any existing codebase.
+This is a **clean-room reimplementation** using published Mach papers and documentation.
 
 ## License
 
-**Mach_R Implementation:** MIT License
-**Historical CMU Mach Archives:** CMU Mach License
+- **Mach_R Implementation:** MIT License
+- **Historical Archives:** CMU Mach License (reference only)
 
-The Mach_R Rust implementation (all code in `src/`, `tools/`, `real_os/`, etc.) is licensed under the MIT License, allowing free use, modification, and distribution.
-
-Historical CMU Mach source code archived in `archive/c-reference/` for research purposes remains under its original CMU Mach license. This archived code is not part of the Mach_R implementation and is included solely for historical reference.
-
-See [LICENSE](LICENSE) for complete licensing details and CMU Mach acknowledgment.
-
-```
-MIT License - Mach_R Implementation
-Copyright (c) 2024-2025 Mach_R Contributors
-
-CMU Mach License - Historical Archives Only
-Copyright (c) 1989-1991 Carnegie Mellon University
-```
-
-## Acknowledgments
-
-- **Rick Rashid and the CMU Mach Team** - Original Mach microkernel design
-- **The Rust Community** - For creating an excellent systems programming language
-- **seL4, Redox OS, and Theseus** - Modern microkernel inspiration
-- **GNU Mach and OpenMach** - Reference implementations
-
-## Related Projects
-
-- **[seL4](https://sel4.systems/)** - Formally verified microkernel
-- **[Redox OS](https://www.redox-os.org/)** - Unix-like OS written in Rust
-- **[Theseus](https://github.com/theseus-os/Theseus)** - Experimental Rust OS
-- **[GNU Mach](https://www.gnu.org/software/hurd/gnumach.html)** - GNU Hurd's Mach implementation
-- **[XNU](https://github.com/apple/darwin-xnu)** - Apple's hybrid kernel based on Mach
-
-## Getting Help
-
-- **Issues:** [GitHub Issues](https://github.com/YOUR_USERNAME/Synthesis/issues)
-- **Discussions:** [GitHub Discussions](https://github.com/YOUR_USERNAME/Synthesis/discussions)
-- **Documentation:** [docs/INDEX.md](docs/INDEX.md)
-
-## Roadmap Highlights
-
-### Phase 1: Core Microkernel (Current)
-- ✅ Port-based IPC system
-- ✅ Task and thread management
-- 🚧 Basic scheduler
-- 🚧 Memory management
-
-### Phase 2: Enhanced Services (Next)
-- 📋 External pager framework
-- 📋 Device driver framework
-- 📋 Network stack skeleton
-- 📋 File system abstractions
-
-### Phase 3: POSIX Compatibility
-- 📋 POSIX syscall layer
-- 📋 Process model on tasks/threads
-- 📋 Signal handling
-- 📋 File descriptor abstraction
-
-### Phase 4: Personality Servers
-- 📋 BSD personality server
-- 📋 System V personality server
-- 📋 User-space init system
-- 📋 Shell and core utilities
-
-See [ROADMAP.md](ROADMAP.md) for complete timeline.
+See [LICENSE](LICENSE) for details.
 
 ---
 
-**Status:** Active Development | **Version:** 0.1.0 (Alpha) | **Last Updated:** 2025-01-19
-
-For questions, suggestions, or contributions, please open an issue or discussion on GitHub.
+**Status:** Active Development | **Version:** 0.1.0

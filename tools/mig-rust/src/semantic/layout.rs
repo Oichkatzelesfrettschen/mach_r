@@ -1,7 +1,7 @@
 //! Message layout calculation for Mach IPC messages
 
-use crate::parser::ast::{Routine, Argument, Direction};
 use super::types::{TypeResolver, TypeSize};
+use crate::parser::ast::{Argument, Direction, Routine};
 
 /// Message layout information
 #[derive(Debug, Clone)]
@@ -285,7 +285,9 @@ impl<'a> MessageLayoutCalculator<'a> {
         };
 
         // Look up type
-        let c_type = self.type_resolver.get_c_type(&type_name)
+        let c_type = self
+            .type_resolver
+            .get_c_type(&type_name)
             .unwrap_or_else(|| type_name.clone());
 
         let size = match self.type_resolver.get_size(&type_name) {
@@ -295,7 +297,9 @@ impl<'a> MessageLayoutCalculator<'a> {
         };
 
         // Get Mach message type
-        let mach_type = self.type_resolver.lookup(&type_name)
+        let mach_type = self
+            .type_resolver
+            .lookup(&type_name)
             .map(|t| t.mach_type)
             .unwrap_or(super::types::MachMsgType::TypeInteger32);
 

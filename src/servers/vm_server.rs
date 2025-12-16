@@ -3,13 +3,13 @@
 //! Manages virtual memory operations including allocation, deallocation,
 //! and memory protection for user tasks.
 
-use crate::types::{PortId, TaskId};
 use crate::message::Message;
 use crate::port::Port;
-use alloc::sync::Arc;
+use crate::types::{PortId, TaskId};
 use alloc::collections::BTreeMap;
-use alloc::vec;
 use alloc::string::ToString;
+use alloc::sync::Arc;
+use alloc::vec;
 use spin::Mutex;
 
 /// VM Server operations
@@ -51,137 +51,151 @@ impl VmServer {
             regions: Mutex::new(BTreeMap::new()),
         }
     }
-    
+
     pub fn server_port(&self) -> PortId {
         self.server_port
     }
-    pub fn server_port_arc(&self) -> Arc<Port> { Arc::clone(&self.port) }
-    
+    pub fn server_port_arc(&self) -> Arc<Port> {
+        Arc::clone(&self.port)
+    }
+
     /// Allocate virtual memory
     pub fn vm_allocate(&self, task: TaskId, size: usize, protection: u32) -> Result<usize, i32> {
         let mut regions = self.regions.lock();
-        
+
         // Find a free region (simplified allocation)
         let base_addr = 0x10000000 + (regions.len() * 0x1000000); // 256MB spacing
-        
+
         let region = MemoryRegion {
             start: base_addr,
             size,
             protection,
             owner_task: task,
         };
-        
+
         regions.insert(base_addr, region);
-        
+
         // Actually allocate pages
         let page_manager = crate::memory::page_manager();
         let pages_needed = (size + 4095) / 4096; // Round up to pages
-        
+
         for i in 0..pages_needed {
             if let Ok(phys_page) = page_manager.allocate_page() {
                 let virt_addr = crate::paging::VirtualAddress(base_addr + i * 4096);
                 let mut page_table = crate::paging::active_page_table();
-                let flags = crate::paging::PageTableFlags::PRESENT | crate::paging::PageTableFlags::WRITABLE;
+                let flags = crate::paging::PageTableFlags::PRESENT
+                    | crate::paging::PageTableFlags::WRITABLE;
                 page_table.map(virt_addr, phys_page, flags);
             } else {
                 return Err(-12); // ENOMEM
             }
         }
-        
+
         Ok(base_addr)
     }
-    
+
     /// Deallocate virtual memory
     pub fn vm_deallocate(&self, task: TaskId, addr: usize, size: usize) -> Result<(), i32> {
         let mut regions = self.regions.lock();
-        
+
         if let Some(region) = regions.get(&addr) {
             if region.owner_task != task {
                 return Err(-13); // EACCES
             }
-            
+
             if region.size != size {
                 return Err(-22); // EINVAL
             }
-            
+
             // Unmap pages
             let pages_to_free = (size + 4095) / 4096;
             let mut page_table = crate::paging::active_page_table();
-            
+
             for i in 0..pages_to_free {
                 let virt_addr = crate::paging::VirtualAddress(addr + i * 4096);
                 page_table.unmap(virt_addr);
             }
-            
+
             regions.remove(&addr);
             Ok(())
         } else {
             Err(-22) // EINVAL
         }
     }
-    
+
     /// Change memory protection
-    pub fn vm_protect(&self, task: TaskId, addr: usize, size: usize, protection: u32) -> Result<(), i32> {
+    pub fn vm_protect(
+        &self,
+        task: TaskId,
+        addr: usize,
+        size: usize,
+        protection: u32,
+    ) -> Result<(), i32> {
         let mut regions = self.regions.lock();
-        
+
         if let Some(region) = regions.get_mut(&addr) {
             if region.owner_task != task {
                 return Err(-13); // EACCES
             }
-            
+
             region.protection = protection;
-            
+
             // Update page table protections
             let pages_to_update = (size + 4095) / 4096;
             let mut page_table = crate::paging::active_page_table();
-            
+
             for i in 0..pages_to_update {
                 let virt_addr = crate::paging::VirtualAddress(addr + i * 4096);
-                
+
                 // Convert protection flags
                 let mut flags = crate::paging::PageTableFlags::PRESENT;
-                if protection & 0x02 != 0 { // VM_PROT_WRITE
+                if protection & 0x02 != 0 {
+                    // VM_PROT_WRITE
                     flags |= crate::paging::PageTableFlags::WRITABLE;
                 }
-                if protection & 0x04 == 0 { // VM_PROT_EXECUTE
+                if protection & 0x04 == 0 {
+                    // VM_PROT_EXECUTE
                     flags |= crate::paging::PageTableFlags::NO_EXECUTE;
                 }
-                
+
                 // Get current physical address and remap
                 if let Some(phys_addr) = page_table.translate(virt_addr) {
-                    page_table.map(virt_addr, crate::paging::PhysicalAddress(phys_addr.0), flags);
+                    page_table.map(
+                        virt_addr,
+                        crate::paging::PhysicalAddress(phys_addr.0),
+                        flags,
+                    );
                 }
             }
-            
+
             Ok(())
         } else {
             Err(-22) // EINVAL
         }
     }
-    
+
     /// Handle incoming message (via MIG dispatch)
     pub fn handle_message(&self, msg: Message) -> Option<Message> {
         crate::mig::generated::vm::dispatch(self, &msg)
     }
-    
+
     fn handle_allocate(&self, msg: Message) -> Option<Message> {
         let data = msg.data();
         if data.len() < 12 {
             return Some(self.create_error_reply(msg.remote_port(), -22));
         }
-        
+
         let size = usize::from_le_bytes([
-            data[4], data[5], data[6], data[7],
-            data[8], data[9], data[10], data[11]
+            data[4], data[5], data[6], data[7], data[8], data[9], data[10], data[11],
         ]);
         let protection = if data.len() >= 16 {
             u32::from_le_bytes([data[12], data[13], data[14], data[15]])
         } else {
             0x07 // VM_PROT_READ | VM_PROT_WRITE | VM_PROT_EXECUTE
         };
-        
+
         let requesting_task = TaskId(1); // Simplified
-        
+
         match self.vm_allocate(requesting_task, size, protection) {
             Ok(addr) => {
                 let mut reply_data = vec![0u8; 12];
@@ -192,69 +206,65 @@ impl VmServer {
             Err(errno) => Some(self.create_error_reply(msg.remote_port(), errno)),
         }
     }
-    
+
     fn handle_deallocate(&self, msg: Message) -> Option<Message> {
         let data = msg.data();
         if data.len() < 20 {
             return Some(self.create_error_reply(msg.remote_port(), -22));
         }
-        
+
         let addr = usize::from_le_bytes([
-            data[4], data[5], data[6], data[7],
-            data[8], data[9], data[10], data[11]
+            data[4], data[5], data[6], data[7], data[8], data[9], data[10], data[11],
         ]);
         let size = usize::from_le_bytes([
-            data[12], data[13], data[14], data[15],
-            data[16], data[17], data[18], data[19]
+            data[12], data[13], data[14], data[15], data[16], data[17], data[18], data[19],
         ]);
-        
+
         let requesting_task = TaskId(1); // Simplified
-        
+
         match self.vm_deallocate(requesting_task, addr, size) {
             Ok(()) => Some(self.create_success_reply(msg.remote_port())),
             Err(errno) => Some(self.create_error_reply(msg.remote_port(), errno)),
         }
     }
-    
+
     fn handle_protect(&self, msg: Message) -> Option<Message> {
         let data = msg.data();
         if data.len() < 24 {
             return Some(self.create_error_reply(msg.remote_port(), -22));
         }
-        
+
         let addr = usize::from_le_bytes([
-            data[4], data[5], data[6], data[7],
-            data[8], data[9], data[10], data[11]
+            data[4], data[5], data[6], data[7], data[8], data[9], data[10], data[11],
         ]);
         let size = usize::from_le_bytes([
-            data[12], data[13], data[14], data[15],
-            data[16], data[17], data[18], data[19]
+            data[12], data[13], data[14], data[15], data[16], data[17], data[18], data[19],
         ]);
         let protection = u32::from_le_bytes([data[20], data[21], data[22], data[23]]);
-        
+
         let requesting_task = TaskId(1); // Simplified
-        
+
         match self.vm_protect(requesting_task, addr, size, protection) {
             Ok(()) => Some(self.create_success_reply(msg.remote_port())),
             Err(errno) => Some(self.create_error_reply(msg.remote_port(), errno)),
         }
     }
-    
+
     fn handle_map(&self, _msg: Message) -> Option<Message> {
         // Simplified - not implemented
         None
     }
-    
+
     fn handle_unmap(&self, _msg: Message) -> Option<Message> {
         // Simplified - not implemented
         None
     }
-    
+
     fn create_success_reply(&self, remote_port: PortId) -> Message {
         let reply_data = 0i32.to_le_bytes().to_vec();
         Message::new_out_of_line(remote_port, reply_data)
     }
-    
+
     fn create_error_reply(&self, remote_port: PortId, errno: i32) -> Message {
         let reply_data = errno.to_le_bytes().to_vec();
         Message::new_out_of_line(remote_port, reply_data)
@@ -296,8 +306,8 @@ impl VmServer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mig::generated::vm;
     use crate::message::MessageBody;
+    use crate::mig::generated::vm;
 
     #[test]
     fn e2e_vm_allocate_reply() {
@@ -314,7 +324,8 @@ mod tests {
         let rep = reply.receive().expect("reply");
         match rep.body {
             MessageBody::OutOfLine(bytes) => {
-                let mut rc=[0u8;4]; rc.copy_from_slice(&bytes[0..4]);
+                let mut rc = [0u8; 4];
+                rc.copy_from_slice(&bytes[0..4]);
                 let code = i32::from_le_bytes(rc);
                 assert_eq!(code, 0);
             }
@@ -342,29 +353,33 @@ pub static mut VM_SERVER: Option<VmServer> = None;
 pub fn init() {
     let server_task = TaskId(4); // VM server gets task ID 4
     let vm_server = VmServer::new(server_task);
-    
+
     // Register with server registry
     super::SERVER_REGISTRY.register_server("vm_server", vm_server.server_port());
-    
+
     // Register with name server
-    if let Some(name_server) = unsafe { (*core::ptr::addr_of!(super::name_server::NAME_SERVER)).as_ref() } {
+    if let Some(name_server) =
+        unsafe { (*core::ptr::addr_of!(super::name_server::NAME_SERVER)).as_ref() }
+    {
         let _ = name_server.register(
             "vm_server".to_string(),
             vm_server.server_port(),
-            server_task
+            server_task,
         );
     }
-    
+
     unsafe {
         VM_SERVER = Some(vm_server);
     }
-    
+
     crate::println!("VM Server initialized on port {}", 300);
 }
 
 /// Get the VM Server instance
 pub fn vm_server() -> &'static VmServer {
     unsafe {
-        (*core::ptr::addr_of!(VM_SERVER)).as_ref().expect("VM Server not initialized")
+        (*core::ptr::addr_of!(VM_SERVER))
+            .as_ref()
+            .expect("VM Server not initialized")
     }
 }

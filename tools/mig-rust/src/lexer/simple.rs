@@ -1,5 +1,4 @@
 /// Simplified lexer implementation to get started
-
 use super::tokens::{Keyword, Symbol, Token};
 
 pub struct SimpleLexer {
@@ -71,7 +70,11 @@ impl SimpleLexer {
                 continue;
             }
 
-            return Err(format!("Unexpected character '{}' at line {}", self.current_char(), self.line));
+            return Err(format!(
+                "Unexpected character '{}' at line {}",
+                self.current_char(),
+                self.line
+            ));
         }
 
         Ok(tokens)

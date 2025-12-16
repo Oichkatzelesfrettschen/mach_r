@@ -1,14 +1,17 @@
-use clap::Parser;
-use std::path::PathBuf;
-use std::fs;
+//! MIG command-line tool
+#![allow(clippy::ptr_arg)]
 
-use mig_rust::{SimpleLexer, SemanticAnalyzer, AnalyzedSubsystem};
-use mig_rust::{PreprocessorConfig, PreprocessorFilter};
-use mig_rust::parser::Parser as MigParser;
-use mig_rust::codegen::c_user_stubs::CUserStubGenerator;
-use mig_rust::codegen::c_server_stubs::CServerStubGenerator;
+use clap::Parser;
+use std::fs;
+use std::path::PathBuf;
+
 use mig_rust::codegen::c_header;
+use mig_rust::codegen::c_server_stubs::CServerStubGenerator;
+use mig_rust::codegen::c_user_stubs::CUserStubGenerator;
 use mig_rust::codegen::rust_stubs::RustStubGenerator;
+use mig_rust::parser::Parser as MigParser;
+use mig_rust::{AnalyzedSubsystem, SemanticAnalyzer, SimpleLexer};
+use mig_rust::{PreprocessorConfig, PreprocessorFilter};
 
 #[derive(Parser)]
 #[command(name = "mig-rust")]
@@ -66,7 +69,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("  Lexing...");
         }
         let mut lexer = SimpleLexer::new(input);
-        let mut tokens = lexer.tokenize().map_err(|e| format!("Lexer error: {}", e))?;
+        let mut tokens = lexer
+            .tokenize()
+            .map_err(|e| format!("Lexer error: {}", e))?;
 
         if cli.verbose {
             println!("  Tokenized {} tokens", tokens.len());
@@ -88,7 +93,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         };
 
         let mut preproc_filter = PreprocessorFilter::new(preproc_config.symbols);
-        tokens = preproc_filter.filter(tokens)
+        tokens = preproc_filter
+            .filter(tokens)
             .map_err(|e| format!("Preprocessor error: {}", e))?;
 
         if cli.verbose {
@@ -113,7 +119,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("  Analyzing...");
         }
         let mut analyzer = SemanticAnalyzer::new();
-        let analyzed = analyzer.analyze(&subsystem)
+        let analyzed = analyzer
+            .analyze(&subsystem)
             .map_err(|e| format!("Semantic error: {}", e))?;
 
         if cli.verbose {
@@ -236,7 +243,7 @@ fn generate_rust_stubs(
     }
 
     let generator = RustStubGenerator::new()
-        .with_async()         // Generate async API
+        .with_async() // Generate async API
         .with_server_traits(); // Generate server traits
 
     let rust_impl = generator.generate(analyzed)?;

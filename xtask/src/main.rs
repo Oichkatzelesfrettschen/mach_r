@@ -1,13 +1,20 @@
-use std::env;
-use std::fs;
-use std::path::{PathBuf};
-use std::process::Command;
-use std::fs::OpenOptions;
-use std::io::Write as IoWrite;
-use sha2::{Sha256, Digest};
-use std::fs::read_dir;
+// Build automation tool - suppress style lints
+#![allow(clippy::needless_borrow)]
+#![allow(clippy::useless_format)]
+#![allow(clippy::let_unit_value)]
+#![allow(clippy::collapsible_if)]
+#![allow(clippy::manual_find)]
+
+use sha2::{Digest, Sha256};
 use shell_escape::escape;
 use std::borrow::Cow;
+use std::env;
+use std::fs;
+use std::fs::read_dir;
+use std::fs::OpenOptions;
+use std::io::Write as IoWrite;
+use std::path::PathBuf;
+use std::process::Command;
 
 fn run(cmd: &mut Command) -> anyhow::Result<()> {
     eprintln!("[RUN] {:?}", cmd);
@@ -20,15 +27,22 @@ fn run(cmd: &mut Command) -> anyhow::Result<()> {
 
 fn run_sudo(cmd: &mut Command) -> anyhow::Result<()> {
     eprintln!("[RUN SUDO] {:?}", cmd);
-    let status = Command::new("sudo").args(cmd.get_program().to_str().unwrap().split_whitespace()).args(cmd.get_args()).status()?;
+    let status = Command::new("sudo")
+        .args(cmd.get_program().to_str().unwrap().split_whitespace())
+        .args(cmd.get_args())
+        .status()?;
     if !status.success() {
         anyhow::bail!("sudo command failed: {:?}", cmd);
     }
     Ok(())
 }
 
-fn cargo() -> Command { Command::new("cargo") }
-fn rustup() -> Command { Command::new("rustup") }
+fn cargo() -> Command {
+    Command::new("cargo")
+}
+fn rustup() -> Command {
+    Command::new("rustup")
+}
 
 fn root() -> anyhow::Result<PathBuf> {
     // xtask runs in workspace: synthesis/
@@ -53,7 +67,14 @@ fn task_fmt_check() -> anyhow::Result<()> {
 }
 
 fn task_clippy() -> anyhow::Result<()> {
-    run(cargo().args(["clippy", "--all-targets", "--all-features", "--", "-D", "warnings"]))
+    run(cargo().args([
+        "clippy",
+        "--all-targets",
+        "--all-features",
+        "--",
+        "-D",
+        "warnings",
+    ]))
 }
 
 fn task_test() -> anyhow::Result<()> {
@@ -88,51 +109,91 @@ fn task_qemu_fast() -> anyhow::Result<()> {
 }
 
 fn task_qemu_dev() -> anyhow::Result<()> {
-    task_qemu_with_args(&["--cpus".into(), "4".into(), "--mem".into(), "2G".into(), "--".into(), "-d".into(), "guest_errors".into()])
+    task_qemu_with_args(&[
+        "--cpus".into(),
+        "4".into(),
+        "--mem".into(),
+        "2G".into(),
+        "--".into(),
+        "-d".into(),
+        "guest_errors".into(),
+    ])
 }
 
-fn build_kernel_for_target_profile(target: &str, profile: &str) -> anyhow::Result<(PathBuf, PathBuf)> {
+fn build_kernel_for_target_profile(
+    target: &str,
+    profile: &str,
+) -> anyhow::Result<(PathBuf, PathBuf)> {
     let (_build, dist) = ensure_dirs()?;
     let root_dir = root()?;
-    let cargo_profile_flag = if profile == "release" { "--release" } else { "" };
-    let final_profile_dir = if profile == "release" { "release" } else { "debug" };
+    let cargo_profile_flag = if profile == "release" {
+        "--release"
+    } else {
+        ""
+    };
+    let final_profile_dir = if profile == "release" {
+        "release"
+    } else {
+        "debug"
+    };
 
-    eprintln!("[BUILD] Building {} kernel for {} profile...", target, profile);
-    
+    eprintln!(
+        "[BUILD] Building {} kernel for {} profile...",
+        target, profile
+    );
+
     let mut cmd = Command::new("cross");
-    cmd.args([
-        "build",
-        cargo_profile_flag,
-        "--target",
-        target,
-        "--bin",
-        "mach_r",
-    ].into_iter().filter(|s| !s.is_empty()).collect::<Vec<&str>>());
+    cmd.args(
+        [
+            "build",
+            cargo_profile_flag,
+            "--target",
+            target,
+            "--bin",
+            "mach_r",
+        ]
+        .into_iter()
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<&str>>(),
+    );
     run(&mut cmd)?;
 
-    let elf_path_in_target = root_dir.join(format!(
-        "target/{}/{}/mach_r",
-        target,
-        final_profile_dir
-    ));
+    let elf_path_in_target =
+        root_dir.join(format!("target/{}/{}/mach_r", target, final_profile_dir));
     let out_elf = dist.join(format!("mach_r_kernel_{}.elf", target));
     fs::copy(&elf_path_in_target, &out_elf)?;
 
     let out_bin = dist.join(format!("mach_r_kernel_{}.bin", target));
     if let Some(objcopy) = find_objcopy() {
-        eprintln!("[OBJCOPY] Using {} to create binary for {} -> {}", objcopy, target, out_bin.display());
+        eprintln!(
+            "[OBJCOPY] Using {} to create binary for {} -> {}",
+            objcopy,
+            target,
+            out_bin.display()
+        );
         let status = Command::new(objcopy)
-            .args(["-O", "binary", elf_path_in_target.to_str().unwrap(), out_bin.to_str().unwrap()])
+            .args([
+                "-O",
+                "binary",
+                elf_path_in_target.to_str().unwrap(),
+                out_bin.to_str().unwrap(),
+            ])
             .status();
         match status {
             Ok(s) if s.success() => {}
             _ => {
-                eprintln!("[WARN] objcopy failed for {}; copying ELF as bin fallback", target);
+                eprintln!(
+                    "[WARN] objcopy failed for {}; copying ELF as bin fallback",
+                    target
+                );
                 fs::copy(&elf_path_in_target, &out_bin)?;
             }
         }
     } else {
-        eprintln!("[WARN] objcopy not found; copying ELF as bin for {}", target);
+        eprintln!(
+            "[WARN] objcopy not found; copying ELF as bin for {}",
+            target
+        );
         fs::copy(&elf_path_in_target, &out_bin)?;
     }
 
@@ -154,14 +215,26 @@ fn task_kernel() -> anyhow::Result<()> {
     // Build for AArch664
     let (aarch64_elf, aarch64_bin) =
         build_kernel_for_target_profile("aarch64-unknown-none", "release")?;
-    all_artifacts.push((format!("mach_r_kernel_{}.elf", "aarch64-unknown-none"), aarch64_elf));
-    all_artifacts.push((format!("mach_r_kernel_{}.bin", "aarch64-unknown-none"), aarch64_bin));
+    all_artifacts.push((
+        format!("mach_r_kernel_{}.elf", "aarch64-unknown-none"),
+        aarch64_elf,
+    ));
+    all_artifacts.push((
+        format!("mach_r_kernel_{}.bin", "aarch64-unknown-none"),
+        aarch64_bin,
+    ));
 
     // Build for x86_64
     let (x86_64_elf, x86_64_bin) =
         build_kernel_for_target_profile("x86_64-unknown-none", "release")?;
-    all_artifacts.push((format!("mach_r_kernel_{}.elf", "x86_64-unknown-none"), x86_64_elf));
-    all_artifacts.push((format!("mach_r_kernel_{}.bin", "x86_64-unknown-none"), x86_64_bin));
+    all_artifacts.push((
+        format!("mach_r_kernel_{}.elf", "x86_64-unknown-none"),
+        x86_64_elf,
+    ));
+    all_artifacts.push((
+        format!("mach_r_kernel_{}.bin", "x86_64-unknown-none"),
+        x86_64_bin,
+    ));
 
     // Write SHA256SUMS
     let sums_path = dist.join("SHA256SUMS");
@@ -175,7 +248,7 @@ fn task_kernel() -> anyhow::Result<()> {
     eprintln!("[ARTIFACT] {}", sums_path.display());
 
     // Update manifest with all generated artifacts
-    let _ = write_manifest_with_artifacts(all_artifacts)?; 
+    let _ = write_manifest_with_artifacts(all_artifacts)?;
 
     Ok(())
 }
@@ -204,15 +277,15 @@ fn task_bootloader(args: &[String]) -> anyhow::Result<()> {
         }
     }
 
-    eprintln!("[BOOTLOADER] Building for {} (profile: {})...", target, profile);
+    eprintln!(
+        "[BOOTLOADER] Building for {} (profile: {})...",
+        target, profile
+    );
 
     run(rustup().args(["target", "add", target]))?;
 
     let mut cmd = cargo();
-    cmd.arg("build")
-        .arg("--lib")
-        .arg("--target")
-        .arg(target);
+    cmd.arg("build").arg("--lib").arg("--target").arg(target);
 
     if profile == "release" {
         cmd.arg("--release");
@@ -224,10 +297,12 @@ fn task_bootloader(args: &[String]) -> anyhow::Result<()> {
 
     run(&mut cmd)?;
 
-    eprintln!("[BOOTLOADER] Build successful for {} (profile: {})!", target, profile);
+    eprintln!(
+        "[BOOTLOADER] Build successful for {} (profile: {})!",
+        target, profile
+    );
     Ok(())
 }
-
 
 fn task_utm() -> anyhow::Result<()> {
     let (build, dist) = ensure_dirs()?;
@@ -319,31 +394,48 @@ fn task_qemu_kernel(args: &[String]) -> anyhow::Result<()> {
 
     // Ensure kernel is built for the selected architecture
     if !kernel_bin.exists() {
-        eprintln!("[INFO] Kernel binary for {} not found, building...", qemu_target_arch);
+        eprintln!(
+            "[INFO] Kernel binary for {} not found, building...",
+            qemu_target_arch
+        );
         // Call task_kernel without arguments, as it builds both aarch64 and x86_64 in release.
         // It's not ideal if only one is needed, but simplifies the call for now.
         // A future enhancement could allow task_kernel to build specific targets.
         task_kernel()?;
         if !kernel_bin.exists() {
-             anyhow::bail!("Failed to build kernel binary {} for {}", kernel_bin.display(), qemu_target_arch);
+            anyhow::bail!(
+                "Failed to build kernel binary {} for {}",
+                kernel_bin.display(),
+                qemu_target_arch
+            );
         }
     }
-    
+
     // Check if the appropriate QEMU system command exists
     if !have(qemu_system_cmd) {
-        anyhow::bail!("{} not available. Please install QEMU for {} systems.", qemu_system_cmd, qemu_target_arch);
+        anyhow::bail!(
+            "{} not available. Please install QEMU for {} systems.",
+            qemu_system_cmd,
+            qemu_target_arch
+        );
     }
 
     eprintln!("[QEMU] Direct kernel boot for {}...", qemu_target_arch);
     let status = Command::new(qemu_system_cmd)
         .args([
-            "-M", qemu_machine,
-            "-cpu", qemu_cpu,
-            "-smp", "4",
-            "-m", "2G",
-            "-kernel", kernel_bin.to_str().unwrap(), // Use the .bin file for direct kernel boot
+            "-M",
+            qemu_machine,
+            "-cpu",
+            qemu_cpu,
+            "-smp",
+            "4",
+            "-m",
+            "2G",
+            "-kernel",
+            kernel_bin.to_str().unwrap(), // Use the .bin file for direct kernel boot
             "-nographic",
-            "-serial", "mon:stdio",
+            "-serial",
+            "mon:stdio",
         ])
         .status();
     match status {
@@ -364,7 +456,9 @@ fn find_objcopy() -> Option<&'static str> {
         "aarch64-elf-objcopy",
         "objcopy",
     ] {
-        if have(c) { return Some(c); }
+        if have(c) {
+            return Some(c);
+        }
     }
     None
 }
@@ -381,7 +475,10 @@ fn append_checksum(path: &PathBuf, name: &str) -> anyhow::Result<()> {
     let (_build, dist) = ensure_dirs()?;
     let sums_path = dist.join("SHA256SUMS");
     let sum = sha256_file(path)?;
-    let mut f = OpenOptions::new().create(true).append(true).open(&sums_path)?;
+    let mut f = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&sums_path)?;
     writeln!(f, "{}  {}", sum, name)?;
     eprintln!("[CHECKSUM] {}  {}", sum, name);
     Ok(())
@@ -391,9 +488,21 @@ fn print_version(cmd: &str) {
     let out = Command::new(cmd).arg("--version").output();
     match out {
         Ok(o) => {
-            let mut s = String::from_utf8_lossy(&o.stdout).lines().next().unwrap_or("").to_string();
-            if s.is_empty() { s = String::from_utf8_lossy(&o.stderr).lines().next().unwrap_or("").to_string(); }
-            if s.is_empty() { s = "<no version output>".into(); }
+            let mut s = String::from_utf8_lossy(&o.stdout)
+                .lines()
+                .next()
+                .unwrap_or("")
+                .to_string();
+            if s.is_empty() {
+                s = String::from_utf8_lossy(&o.stderr)
+                    .lines()
+                    .next()
+                    .unwrap_or("")
+                    .to_string();
+            }
+            if s.is_empty() {
+                s = "<no version output>".into();
+            }
             eprintln!("[VER] {}: {}", cmd, s);
         }
         Err(_) => eprintln!("[VER] {}: not found", cmd),
@@ -402,11 +511,23 @@ fn print_version(cmd: &str) {
 
 fn tool_version(cmd: &str) -> Option<String> {
     let out = Command::new(cmd).arg("--version").output().ok()?;
-    let mut s = String::from_utf8_lossy(&out.stdout).lines().next().unwrap_or("").to_string();
+    let mut s = String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .next()
+        .unwrap_or("")
+        .to_string();
     if s.is_empty() {
-        s = String::from_utf8_lossy(&out.stderr).lines().next().unwrap_or("").to_string();
+        s = String::from_utf8_lossy(&out.stderr)
+            .lines()
+            .next()
+            .unwrap_or("")
+            .to_string();
     }
-    if s.is_empty() { None } else { Some(s) }
+    if s.is_empty() {
+        None
+    } else {
+        Some(s)
+    }
 }
 
 fn write_manifest_with_artifacts(extra_artifacts: Vec<(String, PathBuf)>) -> anyhow::Result<()> {
@@ -427,13 +548,14 @@ fn write_manifest_with_artifacts(extra_artifacts: Vec<(String, PathBuf)>) -> any
     });
     let mut arts: Vec<(String, PathBuf)> = extra_artifacts; // Start with extra artifacts
     let build = root()?.join("build/images");
-    
+
     // Add other fixed artifacts
-    if dist.join("mach_r_kernel.elf").exists() { // Old naming convention
+    if dist.join("mach_r_kernel.elf").exists() {
+        // Old naming convention
         arts.push(("mach_r_kernel.elf".into(), dist.join("mach_r_kernel.elf")));
         arts.push(("mach_r_kernel.bin".into(), dist.join("mach_r_kernel.bin")));
     }
-    
+
     // Ensure all target specific kernel artifacts are included.
     // Assuming they are named mach_r_kernel_{target}.elf/bin
     let target_prefix = "mach_r_kernel_";
@@ -441,14 +563,15 @@ fn write_manifest_with_artifacts(extra_artifacts: Vec<(String, PathBuf)>) -> any
         let entry = entry?;
         let path = entry.path();
         if let Some(file_name) = path.file_name().and_then(|s| s.to_str()) {
-            if file_name.starts_with(target_prefix) && (file_name.ends_with(".elf") || file_name.ends_with(".bin")) {
+            if file_name.starts_with(target_prefix)
+                && (file_name.ends_with(".elf") || file_name.ends_with(".bin"))
+            {
                 if !arts.iter().any(|(name, _)| name == file_name) {
                     arts.push((file_name.to_string(), path));
                 }
             }
         }
     }
-
 
     arts.push(("mach_r.qcow2".into(), build.join("mach_r.qcow2")));
     arts.push(("mach_r.iso".into(), build.join("mach_r.iso")));
@@ -498,17 +621,51 @@ fn parse_qemu_opts(args: &[String]) -> QemuOpts {
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
-            "--cpu" if i + 1 < args.len() => { q.cpu = args[i+1].clone(); i += 2; }
-            "--cpus" if i + 1 < args.len() => { q.cpus = args[i+1].clone(); i += 2; }
-            "--mem" if i + 1 < args.len() => { q.mem = args[i+1].clone(); i += 2; }
-            "--display" if i + 1 < args.len() => { q.display = Some(args[i+1].clone()); q.gui = true; i += 2; }
-            "--gui" => { q.gui = true; i += 1; }
-            "--vga" if i + 1 < args.len() => { q.vga = Some(args[i+1].clone()); i += 2; }
-            "--no-reboot" => { q.no_reboot = true; i += 1; }
-            "--debug-flags" if i + 1 < args.len() => { q.debug_flags = Some(args[i+1].clone()); i += 2; }
-            "--logfile" if i + 1 < args.len() => { q.logfile = Some(PathBuf::from(args[i+1].clone())); i += 2; }
-            "--" => { q.extra.extend_from_slice(&args[i+1..]); break; }
-            other => { q.extra.push(other.to_string()); i += 1; }
+            "--cpu" if i + 1 < args.len() => {
+                q.cpu = args[i + 1].clone();
+                i += 2;
+            }
+            "--cpus" if i + 1 < args.len() => {
+                q.cpus = args[i + 1].clone();
+                i += 2;
+            }
+            "--mem" if i + 1 < args.len() => {
+                q.mem = args[i + 1].clone();
+                i += 2;
+            }
+            "--display" if i + 1 < args.len() => {
+                q.display = Some(args[i + 1].clone());
+                q.gui = true;
+                i += 2;
+            }
+            "--gui" => {
+                q.gui = true;
+                i += 1;
+            }
+            "--vga" if i + 1 < args.len() => {
+                q.vga = Some(args[i + 1].clone());
+                i += 2;
+            }
+            "--no-reboot" => {
+                q.no_reboot = true;
+                i += 1;
+            }
+            "--debug-flags" if i + 1 < args.len() => {
+                q.debug_flags = Some(args[i + 1].clone());
+                i += 2;
+            }
+            "--logfile" if i + 1 < args.len() => {
+                q.logfile = Some(PathBuf::from(args[i + 1].clone()));
+                i += 2;
+            }
+            "--" => {
+                q.extra.extend_from_slice(&args[i + 1..]);
+                break;
+            }
+            other => {
+                q.extra.push(other.to_string());
+                i += 1;
+            }
         }
     }
     q
@@ -518,21 +675,44 @@ fn read_qemu_config() -> Option<QemuOpts> {
     // Simple ~/.mach_r_qemu.toml
     let home = std::env::var("HOME").ok()?;
     let path = PathBuf::from(home).join(".mach_r_qemu.toml");
-    if !path.exists() { return None; }
+    if !path.exists() {
+        return None;
+    }
     let s = std::fs::read_to_string(path).ok()?;
     let v: toml::Value = toml::from_str(&s).ok()?;
     let mut o = QemuOpts::default();
-    if let Some(cpu) = v.get("cpu").and_then(|x| x.as_str()) { o.cpu = cpu.to_string(); }
-    if let Some(cpus) = v.get("cpus").and_then(|x| x.as_integer()) { o.cpus = cpus.to_string(); }
-    if let Some(mem) = v.get("mem").and_then(|x| x.as_str()) { o.mem = mem.to_string(); }
-    if let Some(gui) = v.get("gui").and_then(|x| x.as_bool()) { o.gui = gui; }
-    if let Some(display) = v.get("display").and_then(|x| x.as_str()) { o.display = Some(display.to_string()); }
-    if let Some(vga) = v.get("vga").and_then(|x| x.as_str()) { o.vga = Some(vga.to_string()); }
-    if let Some(no_reboot) = v.get("no_reboot").and_then(|x| x.as_bool()) { o.no_reboot = no_reboot; }
-    if let Some(debug_flags) = v.get("debug_flags").and_then(|x| x.as_str()) { o.debug_flags = Some(debug_flags.to_string()); }
-    if let Some(logfile) = v.get("logfile").and_then(|x| x.as_str()) { o.logfile = Some(PathBuf::from(logfile.to_string())); }
+    if let Some(cpu) = v.get("cpu").and_then(|x| x.as_str()) {
+        o.cpu = cpu.to_string();
+    }
+    if let Some(cpus) = v.get("cpus").and_then(|x| x.as_integer()) {
+        o.cpus = cpus.to_string();
+    }
+    if let Some(mem) = v.get("mem").and_then(|x| x.as_str()) {
+        o.mem = mem.to_string();
+    }
+    if let Some(gui) = v.get("gui").and_then(|x| x.as_bool()) {
+        o.gui = gui;
+    }
+    if let Some(display) = v.get("display").and_then(|x| x.as_str()) {
+        o.display = Some(display.to_string());
+    }
+    if let Some(vga) = v.get("vga").and_then(|x| x.as_str()) {
+        o.vga = Some(vga.to_string());
+    }
+    if let Some(no_reboot) = v.get("no_reboot").and_then(|x| x.as_bool()) {
+        o.no_reboot = no_reboot;
+    }
+    if let Some(debug_flags) = v.get("debug_flags").and_then(|x| x.as_str()) {
+        o.debug_flags = Some(debug_flags.to_string());
+    }
+    if let Some(logfile) = v.get("logfile").and_then(|x| x.as_str()) {
+        o.logfile = Some(PathBuf::from(logfile.to_string()));
+    }
     if let Some(arr) = v.get("extra").and_then(|x| x.as_array()) {
-        o.extra = arr.iter().filter_map(|e| e.as_str().map(|s| s.to_string())).collect();
+        o.extra = arr
+            .iter()
+            .filter_map(|e| e.as_str().map(|s| s.to_string()))
+            .collect();
     }
     Some(o)
 }
@@ -554,9 +734,18 @@ fn task_filesystem() -> anyhow::Result<()> {
 fn task_env_check() -> anyhow::Result<()> {
     // Check rustup components
     eprintln!("[INFO] Checking rustup components...");
-    run(rustup().args(["component", "add", "rust-src"]).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()))?;
-    run(rustup().args(["component", "add", "rustfmt"]).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()))?;
-    run(rustup().args(["component", "add", "clippy"]).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()))?;
+    run(rustup()
+        .args(["component", "add", "rust-src"])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null()))?;
+    run(rustup()
+        .args(["component", "add", "rustfmt"])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null()))?;
+    run(rustup()
+        .args(["component", "add", "clippy"])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null()))?;
     eprintln!("[INFO] Rustup components checked/installed.");
 
     // Check external tools
@@ -587,7 +776,9 @@ fn task_env_check() -> anyhow::Result<()> {
     // Check for grub-mkrescue/grub2-mkrescue
     if !have("grub-mkrescue") && !have("grub2-mkrescue") {
         missing_tools.push("grub-mkrescue/grub2-mkrescue");
-        eprintln!("[WARN] grub-mkrescue or grub2-mkrescue not found. Used for x86_64 ISO creation.");
+        eprintln!(
+            "[WARN] grub-mkrescue or grub2-mkrescue not found. Used for x86_64 ISO creation."
+        );
         eprintln!("[INFO] On Ubuntu/Debian: `sudo apt install grub-pc-bin xorriso`");
         eprintln!("[INFO] On Fedora: `sudo dnf install grub2-tools-extra xorriso`");
     }
@@ -707,19 +898,19 @@ fn task_disk_image_with_args(args: &[String]) -> anyhow::Result<()> {
     while i < args.len() {
         match args[i].as_str() {
             "--kernel" if i + 1 < args.len() => {
-                kernel_bin_name = args[i+1].clone();
+                kernel_bin_name = args[i + 1].clone();
                 i += 2;
             }
             "--output-img" if i + 1 < args.len() => {
-                output_img_name = args[i+1].clone();
+                output_img_name = args[i + 1].clone();
                 i += 2;
             }
             "--output-qcow2" if i + 1 < args.len() => {
-                output_qcow2_name = args[i+1].clone();
+                output_qcow2_name = args[i + 1].clone();
                 i += 2;
             }
             "--size" if i + 1 < args.len() => {
-                img_size_mb = args[i+1].parse()?;
+                img_size_mb = args[i + 1].parse()?;
                 i += 2;
             }
             _ => {
@@ -735,18 +926,31 @@ fn task_disk_image_with_args(args: &[String]) -> anyhow::Result<()> {
 
     // Ensure kernel exists
     if !kernel_bin_path.exists() {
-        eprintln!("[INFO] Kernel binary {} not found, building for x86_64-unknown-none release...", kernel_bin_path.display());
+        eprintln!(
+            "[INFO] Kernel binary {} not found, building for x86_64-unknown-none release...",
+            kernel_bin_path.display()
+        );
         // Assume x86_64-unknown-none release for disk image
         build_kernel_for_target_profile("x86_64-unknown-none", "release")?;
         if !kernel_bin_path.exists() {
-            anyhow::bail!("Failed to build kernel binary {} for disk image.", kernel_bin_path.display());
+            anyhow::bail!(
+                "Failed to build kernel binary {} for disk image.",
+                kernel_bin_path.display()
+            );
         }
     }
-    
-    eprintln!("[DISK] Creating bootable x86_64 disk image at {} ({}MB)...", output_img_path.display(), img_size_mb);
+
+    eprintln!(
+        "[DISK] Creating bootable x86_64 disk image at {} ({}MB)...",
+        output_img_path.display(),
+        img_size_mb
+    );
 
     // Step 1: Create raw disk image
-    eprintln!("[DISK] Step 1: Creating raw disk image ({}MB)...", img_size_mb);
+    eprintln!(
+        "[DISK] Step 1: Creating raw disk image ({}MB)...",
+        img_size_mb
+    );
     let _ = fs::remove_file(&output_img_path); // Remove if exists
     run(Command::new("dd")
         .arg(format!("if=/dev/zero"))
@@ -757,61 +961,82 @@ fn task_disk_image_with_args(args: &[String]) -> anyhow::Result<()> {
 
     // Step 2: Create partition table
     eprintln!("[DISK] Step 2: Creating partition table...");
-    run_sudo(&mut Command::new("parted")
-        .arg(output_img_path.to_str().unwrap())
-        .arg("-s")
-        .arg("mklabel")
-        .arg("msdos"))?;
-    run_sudo(&mut Command::new("parted")
-        .arg(output_img_path.to_str().unwrap())
-        .arg("-s")
-        .arg("mkpart")
-        .arg("primary")
-        .arg("ext2")
-        .arg("1MiB")
-        .arg("100%"))?;
-    run_sudo(&mut Command::new("parted")
-        .arg(output_img_path.to_str().unwrap())
-        .arg("-s")
-        .arg("set")
-        .arg("1")
-        .arg("boot")
-        .arg("on"))?;
+    run_sudo(
+        &mut Command::new("parted")
+            .arg(output_img_path.to_str().unwrap())
+            .arg("-s")
+            .arg("mklabel")
+            .arg("msdos"),
+    )?;
+    run_sudo(
+        &mut Command::new("parted")
+            .arg(output_img_path.to_str().unwrap())
+            .arg("-s")
+            .arg("mkpart")
+            .arg("primary")
+            .arg("ext2")
+            .arg("1MiB")
+            .arg("100%"),
+    )?;
+    run_sudo(
+        &mut Command::new("parted")
+            .arg(output_img_path.to_str().unwrap())
+            .arg("-s")
+            .arg("set")
+            .arg("1")
+            .arg("boot")
+            .arg("on"),
+    )?;
 
     // Step 3: Format partition and install GRUB
     eprintln!("[DISK] Step 3: Formatting partition and installing GRUB...");
-    
+
     // Check for losetup
-    if !have("losetup") { anyhow::bail!("losetup not found. Install util-linux."); }
+    if !have("losetup") {
+        anyhow::bail!("losetup not found. Install util-linux.");
+    }
     let loop_device_output = Command::new("sudo").arg("losetup").arg("-f").output()?;
-    let loop_device = String::from_utf8_lossy(&loop_device_output.stdout).trim().to_string();
+    let loop_device = String::from_utf8_lossy(&loop_device_output.stdout)
+        .trim()
+        .to_string();
     if loop_device.is_empty() {
         anyhow::bail!("No free loop device available. Cannot create bootable disk image.");
     }
 
-    run_sudo(&mut Command::new("losetup")
-        .arg("-P")
-        .arg(&loop_device)
-        .arg(output_img_path.to_str().unwrap()))?;
-    
+    run_sudo(
+        &mut Command::new("losetup")
+            .arg("-P")
+            .arg(&loop_device)
+            .arg(output_img_path.to_str().unwrap()),
+    )?;
+
     // Check for mkfs.ext2
-    if !have("mkfs.ext2") { anyhow::bail!("mkfs.ext2 not found. Install e2fsprogs."); }
-    run_sudo(&mut Command::new("mkfs.ext2")
-        .arg(format!("{}p1", loop_device)))?; // Partition 1
+    if !have("mkfs.ext2") {
+        anyhow::bail!("mkfs.ext2 not found. Install e2fsprogs.");
+    }
+    run_sudo(&mut Command::new("mkfs.ext2").arg(format!("{}p1", loop_device)))?; // Partition 1
 
     let mount_point = build.join(format!("mnt_boot_{}", std::process::id()));
     fs::create_dir_all(&mount_point)?;
 
-    run_sudo(&mut Command::new("mount")
-        .arg(format!("{}p1", loop_device))
-        .arg(mount_point.to_str().unwrap()))?;
+    run_sudo(
+        &mut Command::new("mount")
+            .arg(format!("{}p1", loop_device))
+            .arg(mount_point.to_str().unwrap()),
+    )?;
 
     // Create GRUB directory and copy kernel
     let grub_dir = mount_point.join("boot/grub");
-    run_sudo(&mut Command::new("mkdir").arg("-p").arg(grub_dir.to_str().unwrap()))?;
-    run_sudo(&mut Command::new("cp")
-        .arg(kernel_bin_path.to_str().unwrap())
-        .arg(mount_point.join("boot/kernel.bin").to_str().unwrap()))?;
+    run_sudo(
+        &mut Command::new("mkdir")
+            .arg("-p")
+            .arg(grub_dir.to_str().unwrap()),
+    )?;
+    run_sudo(
+        &mut Command::new("cp")
+            .arg(kernel_bin_path.to_str().unwrap())
+            .arg(mount_point.join("boot/kernel.bin").to_str().unwrap()),
+    )?;
 
     // Create GRUB configuration
     let grub_cfg_content = r#"set timeout=0
@@ -825,20 +1050,28 @@ menuentry "Mach_R Microkernel" {
     let escaped_content = escape(grub_cfg_content.into());
     let grub_cfg_file = grub_dir.join("grub.cfg");
     let escaped_path = escape(Cow::Borrowed(grub_cfg_file.to_str().unwrap()));
-    run_sudo(&mut Command::new("bash")
-        .arg("-c")
-        .arg(format!("echo {} | tee {}", escaped_content, escaped_path))
+    run_sudo(
+        &mut Command::new("bash")
+            .arg("-c")
+            .arg(format!("echo {} | tee {}", escaped_content, escaped_path)),
     )?;
 
     // Install GRUB bootloader
     eprintln!("[DISK] Installing GRUB to MBR...");
-    if !have("grub-install") { anyhow::bail!("grub-install not found. Install grub-pc-bin."); }
+    if !have("grub-install") {
+        anyhow::bail!("grub-install not found. Install grub-pc-bin.");
+    }
 
-    run_sudo(&mut Command::new("grub-install")
-        .arg(format!("--target=i386-pc"))
-        .arg(format!("--boot-directory={}", mount_point.join("boot").display()))
-        .arg("--modules=part_msdos ext2 multiboot2")
-        .arg(&loop_device))?;
+    run_sudo(
+        &mut Command::new("grub-install")
+            .arg(format!("--target=i386-pc"))
+            .arg(format!(
+                "--boot-directory={}",
+                mount_point.join("boot").display()
+            ))
+            .arg("--modules=part_msdos ext2 multiboot2")
+            .arg(&loop_device),
+    )?;
 
     // Cleanup
     eprintln!("[DISK] Step 4: Cleaning up...");
@@ -852,8 +1085,10 @@ menuentry "Mach_R Microkernel" {
         let _ = fs::remove_file(&output_qcow2_path); // Remove if exists
         run(Command::new("qemu-img").args([
             "convert",
-            "-f", "raw",
-            "-O", "qcow2",
+            "-f",
+            "raw",
+            "-O",
+            "qcow2",
             output_img_path.to_str().unwrap(),
             output_qcow2_path.to_str().unwrap(),
         ]))?;
@@ -865,7 +1100,7 @@ menuentry "Mach_R Microkernel" {
     append_checksum(&output_img_path, &output_img_name)?;
     eprintln!("[ARTIFACT] {}", output_img_path.display());
     eprintln!("[ARTIFACT] {}", output_qcow2_path.display());
-    
+
     let _ = write_manifest_with_artifacts(Vec::new())?; // Update manifest
 
     eprintln!("[DISK] Bootable disk image creation complete.");
@@ -925,18 +1160,31 @@ menuentry "Mach_R x86_64 Kernel" {
         // Try grub-mkrescue or xorriso
         if have("grub-mkrescue") {
             eprintln!("[ISO] Using grub-mkrescue...");
-            run(Command::new("grub-mkrescue").args(["-o", iso_path.to_str().unwrap(), iso_root.to_str().unwrap()]))?;
-        } else if have("grub2-mkrescue") { // Some systems use grub2-mkrescue
+            run(Command::new("grub-mkrescue").args([
+                "-o",
+                iso_path.to_str().unwrap(),
+                iso_root.to_str().unwrap(),
+            ]))?;
+        } else if have("grub2-mkrescue") {
+            // Some systems use grub2-mkrescue
             eprintln!("[ISO] Using grub2-mkrescue...");
-            run(Command::new("grub2-mkrescue").args(["-o", iso_path.to_str().unwrap(), iso_root.to_str().unwrap()]))?;
+            run(Command::new("grub2-mkrescue").args([
+                "-o",
+                iso_path.to_str().unwrap(),
+                iso_root.to_str().unwrap(),
+            ]))?;
         } else if have("xorriso") {
             eprintln!("[ISO] Using xorriso...");
             run(Command::new("xorriso").args([
-                "-as", "mkisofs",
-                "-o", iso_path.to_str().unwrap(),
-                "-b", "boot/grub/grub.cfg", // GRUB EFI
+                "-as",
+                "mkisofs",
+                "-o",
+                iso_path.to_str().unwrap(),
+                "-b",
+                "boot/grub/grub.cfg", // GRUB EFI
                 "-no-emul-boot",
-                "-boot-load-size", "4",
+                "-boot-load-size",
+                "4",
                 "-boot-info-table",
                 iso_root.to_str().unwrap(),
             ]))?;
@@ -971,7 +1219,8 @@ menuentry "Mach_R x86_64 Kernel" {
         {
             if have("hdiutil") {
                 run(Command::new("hdiutil").args([
-                    "makehybrid", "-o",
+                    "makehybrid",
+                    "-o",
                     iso_path.to_str().unwrap(),
                     iso_root.to_str().unwrap(),
                 ]))?;
@@ -983,8 +1232,10 @@ menuentry "Mach_R x86_64 Kernel" {
         {
             if have("genisoimage") {
                 run(Command::new("genisoimage").args([
-                    "-R", "-J",
-                    "-o", iso_path.to_str().unwrap(),
+                    "-R",
+                    "-J",
+                    "-o",
+                    iso_path.to_str().unwrap(),
                     iso_root.to_str().unwrap(),
                 ]))?;
             } else {
@@ -993,7 +1244,9 @@ menuentry "Mach_R x86_64 Kernel" {
         }
     }
 
-    if iso_path.exists() { append_checksum(&iso_path, "mach_r.iso")?; }
+    if iso_path.exists() {
+        append_checksum(&iso_path, "mach_r.iso")?;
+    }
     eprintln!("[ARTIFACT] {}", iso_path.display());
     let _ = write_manifest_with_artifacts(Vec::new())?;
     Ok(())
@@ -1002,7 +1255,7 @@ menuentry "Mach_R x86_64 Kernel" {
 fn task_qemu_with_args(args: &[String]) -> anyhow::Result<()> {
     let (build, dist) = ensure_dirs()?;
     let qcow2 = build.join("images/mach_r.qcow2");
-    
+
     let opts = parse_qemu_opts(args);
 
     let mut qemu_system_cmd = "qemu-system-aarch64";
@@ -1035,28 +1288,41 @@ fn task_qemu_with_args(args: &[String]) -> anyhow::Result<()> {
             }
         }
     }
-    
+
     // Ensure kernel is built for the selected architecture
     let kernel_bin_name = format!("mach_r_kernel_{}.bin", kernel_target);
     let kernel_bin = dist.join(&kernel_bin_name);
 
     if !kernel_bin.exists() {
-        eprintln!("[INFO] Kernel binary for {} not found, building...", kernel_target);
+        eprintln!(
+            "[INFO] Kernel binary for {} not found, building...",
+            kernel_target
+        );
         task_kernel()?; // Builds all kernels
         if !kernel_bin.exists() {
-             anyhow::bail!("Failed to build kernel binary {} for {}", kernel_bin.display(), kernel_target);
+            anyhow::bail!(
+                "Failed to build kernel binary {} for {}",
+                kernel_bin.display(),
+                kernel_target
+            );
         }
     }
 
-    if !have(qemu_system_cmd) { anyhow::bail!("{} not found. Please install QEMU for {} systems.", qemu_system_cmd, kernel_target); }
+    if !have(qemu_system_cmd) {
+        anyhow::bail!(
+            "{} not found. Please install QEMU for {} systems.",
+            qemu_system_cmd,
+            kernel_target
+        );
+    }
 
     let mut cmd = Command::new(qemu_system_cmd);
-    
+
     cmd.args(["-M", qemu_machine])
         .args(["-cpu", &opts.cpu])
         .args(["-smp", &opts.cpus])
         .args(["-m", &opts.mem]);
-    
+
     if let Some(vga) = &opts.vga {
         cmd.args(["-vga", vga]);
     }
@@ -1073,24 +1339,31 @@ fn task_qemu_with_args(args: &[String]) -> anyhow::Result<()> {
         cmd.args(["-D", logfile.to_str().unwrap()]);
     }
 
-    cmd.args(["-drive", &format!("if=virtio,format=qcow2,file={}", qcow2.display())])
-        .args(["-kernel", kernel_bin.to_str().unwrap()])
-        .args(["-device", "virtio-net-pci,netdev=net0"]) 
-        .args(["-netdev", "user,id=net0"]);
+    cmd.args([
+        "-drive",
+        &format!("if=virtio,format=qcow2,file={}", qcow2.display()),
+    ])
+    .args(["-kernel", kernel_bin.to_str().unwrap()])
+    .args(["-device", "virtio-net-pci,netdev=net0"])
+    .args(["-netdev", "user,id=net0"]);
 
     if opts.gui {
-        if let Some(d) = &opts.display { cmd.args(["-display", d]); }
+        if let Some(d) = &opts.display {
+            cmd.args(["-display", d]);
+        }
     } else {
         cmd.arg("-nographic");
     }
     cmd.args(["-serial", "mon:stdio"]);
-    if !opts.extra.is_empty() { cmd.args(opts.extra); }
+    if !opts.extra.is_empty() {
+        cmd.args(opts.extra);
+    }
     run(&mut cmd)
 }
 
 fn task_qemu_debug(args: &[String]) -> anyhow::Result<()> {
     let (_build, dist) = ensure_dirs()?;
-    
+
     let opts = parse_qemu_opts(args); // Parse args again for debug options
 
     let mut qemu_target_arch_str = "aarch64-unknown-none".to_string(); // Default
@@ -1129,27 +1402,50 @@ fn task_qemu_debug(args: &[String]) -> anyhow::Result<()> {
 
     // Ensure kernel is built for the selected architecture
     if !kernel_bin.exists() {
-        eprintln!("[INFO] Kernel binary for {} not found, building...", qemu_target_arch);
+        eprintln!(
+            "[INFO] Kernel binary for {} not found, building...",
+            qemu_target_arch
+        );
         task_kernel()?;
         if !kernel_bin.exists() {
-             anyhow::bail!("Failed to build kernel binary {} for {}", kernel_bin.display(), qemu_target_arch);
+            anyhow::bail!(
+                "Failed to build kernel binary {} for {}",
+                kernel_bin.display(),
+                qemu_target_arch
+            );
         }
     }
-    
+
     // Check if the appropriate QEMU system command exists
     if !have(qemu_system_cmd) {
-        anyhow::bail!("{} not available. Please install QEMU for {} systems.", qemu_system_cmd, qemu_target_arch);
+        anyhow::bail!(
+            "{} not available. Please install QEMU for {} systems.",
+            qemu_system_cmd,
+            qemu_target_arch
+        );
     }
 
-    eprintln!("[QEMU] Starting with GDB server for {}...", qemu_target_arch);
+    eprintln!(
+        "[QEMU] Starting with GDB server for {}...",
+        qemu_target_arch
+    );
     let mut cmd = Command::new(qemu_system_cmd);
     cmd.args([
-        "-M", qemu_machine,
-        "-cpu", qemu_cpu,
-        "-smp", &opts.cpus,
-        "-m", &opts.mem,
-        "-kernel", kernel_bin.to_str().unwrap(),
-        "-nographic", "-serial", "mon:stdio", "-s", "-S",
+        "-M",
+        qemu_machine,
+        "-cpu",
+        qemu_cpu,
+        "-smp",
+        &opts.cpus,
+        "-m",
+        &opts.mem,
+        "-kernel",
+        kernel_bin.to_str().unwrap(),
+        "-nographic",
+        "-serial",
+        "mon:stdio",
+        "-s",
+        "-S",
     ]);
 
     // Apply general QEMU options from opts
@@ -1194,30 +1490,30 @@ fn main() -> anyhow::Result<()> {
         "bootloader" => {
             let rest: Vec<String> = args.collect();
             task_bootloader(&rest)
-        },
+        }
         "filesystem" => task_filesystem(),
         "disk-image" => {
             let rest: Vec<String> = args.collect();
             task_disk_image_with_args(&rest)
-        },
+        }
         "iso-image" => {
             let rest: Vec<String> = args.collect();
             task_iso_image_with_args(&rest)
-        },
+        }
         "qemu-fast" => task_qemu_fast(),
         "qemu-dev" => task_qemu_dev(),
         "qemu" => {
             let rest: Vec<String> = args.collect();
             task_qemu_with_args(&rest)
-        },
+        }
         "qemu-kernel" => {
             let rest: Vec<String> = args.collect();
             task_qemu_kernel(&rest)
-        },
+        }
         "qemu-debug" => {
             let rest: Vec<String> = args.collect();
             task_qemu_debug(&rest)
-        },
+        }
         "env-check" => task_env_check(),
         "mig" => task_mig(),
         "utm" => task_utm(),
@@ -1263,13 +1559,13 @@ fn task_all() -> anyhow::Result<()> {
 #[allow(dead_code)]
 fn build_lib_for_target(target: &str) -> anyhow::Result<()> {
     eprintln!("[BUILD LIB] Building library for {}...", target);
-    run(rustup().args(["target", "add", target]).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()))?;
-    let status = cargo().args([
-        "build",
-        "--lib",
-        "--target",
-        target,
-    ]).status()?;
+    run(rustup()
+        .args(["target", "add", target])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null()))?;
+    let status = cargo()
+        .args(["build", "--lib", "--target", target])
+        .status()?;
 
     if status.success() {
         eprintln!("[BUILD LIB] ✅ {} library build successful", target);
@@ -1280,10 +1576,6 @@ fn build_lib_for_target(target: &str) -> anyhow::Result<()> {
     }
 }
 
-
-
-
-
 fn task_mig() -> anyhow::Result<()> {
     // Generate MIG stubs from TOML specs in mig/specs/
     let root_dir = root()?;
@@ -1292,7 +1584,10 @@ fn task_mig() -> anyhow::Result<()> {
     std::fs::create_dir_all(&gen_dir)?;
 
     if !specs_dir.exists() {
-        eprintln!("[MIG] No specs found at {} — creating example spec", specs_dir.display());
+        eprintln!(
+            "[MIG] No specs found at {} — creating example spec",
+            specs_dir.display()
+        );
         std::fs::create_dir_all(&specs_dir)?;
         std::fs::write(
             specs_dir.join("name_server.toml"),
@@ -1333,7 +1628,9 @@ type = "string"
     for entry in read_dir(&specs_dir)? {
         let entry = entry?;
         let path = entry.path();
-        if path.extension().and_then(|s| s.to_str()) != Some("toml") { continue; }
+        if path.extension().and_then(|s| s.to_str()) != Some("toml") {
+            continue;
+        }
         let spec_src = std::fs::read_to_string(&path)?;
         let spec: MigSpec = toml::from_str(&spec_src)?;
         let module_name = spec.name.clone();
@@ -1348,7 +1645,9 @@ type = "string"
     for m in &modules {
         mod_rs_content.push_str(&format!("pub mod {};\n", m));
     }
-    if mod_rs_content.is_empty() { mod_rs_content.push_str("// no specs\n"); }
+    if mod_rs_content.is_empty() {
+        mod_rs_content.push_str("// no specs\n");
+    }
     std::fs::write(gen_dir.join("mod.rs"), mod_rs_content)?;
     Ok(())
 }
@@ -1391,7 +1690,11 @@ fn render_spec(spec: &MigSpec) -> String {
     s.push_str("use alloc::sync::Arc;\n");
     s.push_str("use crate::message::Message;\n\n");
     for r in &spec.routines {
-        s.push_str(&format!("pub const {}_ID: u32 = {};\n", r.name.to_uppercase(), r.id));
+        s.push_str(&format!(
+            "pub const {}_ID: u32 = {};\n",
+            r.name.to_uppercase(),
+            r.id
+        ));
     }
     s.push('\n');
     s.push_str("pub trait NameService {\n");
@@ -1411,7 +1714,8 @@ fn render_spec(spec: &MigSpec) -> String {
             s.push_str(&format!("    {} {{\n{}    }}\n\n", sig, body));
         }
     }
-    if spec.name == "name_server" { // only for name_server module
+    if spec.name == "name_server" {
+        // only for name_server module
         // sync call variants for simple round-trips
         s.push_str("    pub fn register_call(&self, name: &str, port: PortId, reply: &Arc<Port>) -> i32 {\n");
         s.push_str("        let mut data = alloc::vec::Vec::new();\n");
@@ -1452,7 +1756,9 @@ fn render_spec(spec: &MigSpec) -> String {
         s.push_str("        if self.server.send(msg).is_err() { return Err(-1); }\n");
         s.push_str("        if let Some(rep) = reply.receive() { let d = rep.data(); if d.len()>=4 { let mut rc=[0;4]; rc.copy_from_slice(&d[0..4]); let code=i32::from_le_bytes(rc); if code==0 { if d.len()>=12 { let mut ab=[0u8;8]; ab.copy_from_slice(&d[4..12]); return Ok(u64::from_le_bytes(ab)); } else { return Err(-1);} } else { return Err(code);} } }\n");
         s.push_str("        Err(-1)\n    }\n");
-        s.push_str("    pub fn deallocate_call(&self, addr: u64, size: u64, reply: &Arc<Port>) -> i32 {\n");
+        s.push_str(
+            "    pub fn deallocate_call(&self, addr: u64, size: u64, reply: &Arc<Port>) -> i32 {\n",
+        );
         s.push_str("        let mut data = alloc::vec::Vec::new();\n");
         s.push_str("        data.extend_from_slice(&(DEALLOCATE_ID as u32).to_le_bytes());\n");
         s.push_str("        data.extend_from_slice(&addr.to_le_bytes());\n");
@@ -1526,13 +1832,21 @@ fn render_spec(spec: &MigSpec) -> String {
                 s.push_str("                Ok(pid) => {\n");
                 s.push_str("                    let mut out = alloc::vec::Vec::new();\n");
                 s.push_str("                    out.extend_from_slice(&(0i32).to_le_bytes());\n");
-                s.push_str("                    out.extend_from_slice(&(pid.0 as u64).to_le_bytes());\n");
-                s.push_str("                    return Some(Message::new_out_of_line(reply_to, out));\n");
+                s.push_str(
+                    "                    out.extend_from_slice(&(pid.0 as u64).to_le_bytes());\n",
+                );
+                s.push_str(
+                    "                    return Some(Message::new_out_of_line(reply_to, out));\n",
+                );
                 s.push_str("                }\n");
                 s.push_str("                Err(e) => {\n");
                 s.push_str("                    let mut out = alloc::vec::Vec::new();\n");
-                s.push_str("                    out.extend_from_slice(&(e as i32).to_le_bytes());\n");
-                s.push_str("                    return Some(Message::new_out_of_line(reply_to, out));\n");
+                s.push_str(
+                    "                    out.extend_from_slice(&(e as i32).to_le_bytes());\n",
+                );
+                s.push_str(
+                    "                    return Some(Message::new_out_of_line(reply_to, out));\n",
+                );
                 s.push_str("                }\n");
                 s.push_str("            }\n");
                 s.push_str("        }\n");
@@ -1600,7 +1914,9 @@ fn render_spec(spec: &MigSpec) -> String {
                 s.push_str("            let size = u32::from_le_bytes(sb);\n");
                 s.push_str("            let mut pb=[0u8;4]; pb.copy_from_slice(&data[off..off+4]); off+=4;\n");
                 s.push_str("            let prot = u32::from_le_bytes(pb);\n");
-                s.push_str("            let res = svc.page_request(object_id, offset, size, prot);\n");
+                s.push_str(
+                    "            let res = svc.page_request(object_id, offset, size, prot);\n",
+                );
                 s.push_str("            let mut out = alloc::vec::Vec::new();\n");
                 s.push_str("            match res { Ok(pa) => { out.extend_from_slice(&(0i32).to_le_bytes()); out.extend_from_slice(&pa.to_le_bytes()); }, Err(e) => { out.extend_from_slice(&(e as i32).to_le_bytes()); } }\n");
                 s.push_str("            return Some(Message::new_out_of_line(reply_to, out));\n");

@@ -1,7 +1,14 @@
 //! POSIX stdio.h - standard I/O functions
+//!
+//! # Safety
+//!
+//! All functions in this module are FFI-compatible C library functions.
+//! Callers must ensure pointers are valid and buffers are properly sized.
 
+#![allow(clippy::not_unsafe_ptr_arg_deref)]
+
+use super::{STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
 use alloc::boxed::Box;
-use super::{STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO};
 
 /// Simple printf implementation
 #[no_mangle]
@@ -9,7 +16,7 @@ pub extern "C" fn printf(format: *const u8) -> i32 {
     if format.is_null() {
         return -1;
     }
-    
+
     // Convert C string to Rust string
     let c_str = unsafe {
         let mut len = 0;
@@ -18,7 +25,7 @@ pub extern "C" fn printf(format: *const u8) -> i32 {
         }
         core::slice::from_raw_parts(format, len)
     };
-    
+
     if let Ok(format_str) = core::str::from_utf8(c_str) {
         // Simple implementation without format specifiers
         let bytes_written = format_str.len();
@@ -37,7 +44,7 @@ pub extern "C" fn puts(s: *const u8) -> i32 {
     if s.is_null() {
         return -1;
     }
-    
+
     // Convert C string to Rust string
     let c_str = unsafe {
         let mut len = 0;
@@ -46,7 +53,7 @@ pub extern "C" fn puts(s: *const u8) -> i32 {
         }
         core::slice::from_raw_parts(s, len)
     };
-    
+
     if let Ok(s_str) = core::str::from_utf8(c_str) {
         // Write string
         for &byte in s_str.as_bytes() {
@@ -90,9 +97,18 @@ pub struct FILE {
 }
 
 /// Standard streams
-static mut STDIN_FILE: FILE = FILE { fd: STDIN_FILENO, _unused: [0; 64] };
-static mut STDOUT_FILE: FILE = FILE { fd: STDOUT_FILENO, _unused: [0; 64] };
-static mut STDERR_FILE: FILE = FILE { fd: STDERR_FILENO, _unused: [0; 64] };
+static mut STDIN_FILE: FILE = FILE {
+    fd: STDIN_FILENO,
+    _unused: [0; 64],
+};
+static mut STDOUT_FILE: FILE = FILE {
+    fd: STDOUT_FILENO,
+    _unused: [0; 64],
+};
+static mut STDERR_FILE: FILE = FILE {
+    fd: STDERR_FILENO,
+    _unused: [0; 64],
+};
 
 /// Get stdin
 #[no_mangle]
@@ -118,7 +134,7 @@ pub extern "C" fn fopen(filename: *const u8, mode: *const u8) -> *mut FILE {
     if filename.is_null() || mode.is_null() {
         return core::ptr::null_mut();
     }
-    
+
     // Parse mode string - simple implementation
     let flags = match unsafe { *mode } {
         b'r' => super::O_RDONLY,
@@ -126,14 +142,17 @@ pub extern "C" fn fopen(filename: *const u8, mode: *const u8) -> *mut FILE {
         b'a' => super::O_WRONLY | super::O_CREAT | super::O_APPEND,
         _ => return core::ptr::null_mut(),
     };
-    
+
     let fd = super::unistd::open(filename, flags, 0o644);
     if fd < 0 {
         return core::ptr::null_mut();
     }
-    
+
     // Allocate FILE structure (simplified)
-    let file = FILE { fd, _unused: [0; 64] };
+    let file = FILE {
+        fd,
+        _unused: [0; 64],
+    };
     Box::into_raw(Box::new(file))
 }
 
@@ -143,35 +162,30 @@ pub extern "C" fn fclose(stream: *mut FILE) -> i32 {
     if stream.is_null() {
         return -1;
     }
-    
+
     let fd = unsafe { (*stream).fd };
     let result = super::unistd::close(fd);
-    
+
     // Free the FILE structure (if it was allocated)
     if stream != stdin() && stream != stdout() && stream != stderr() {
         unsafe {
             let _ = Box::from_raw(stream);
         }
     }
-    
+
     result
 }
 
 /// File read
 #[no_mangle]
-pub extern "C" fn fread(
-    ptr: *mut u8,
-    size: usize,
-    nmemb: usize,
-    stream: *mut FILE,
-) -> usize {
+pub extern "C" fn fread(ptr: *mut u8, size: usize, nmemb: usize, stream: *mut FILE) -> usize {
     if ptr.is_null() || stream.is_null() || size == 0 {
         return 0;
     }
-    
+
     let fd = unsafe { (*stream).fd };
     let total_size = size * nmemb;
-    
+
     let bytes_read = super::unistd::read(fd, ptr, total_size);
     if bytes_read < 0 {
         0
@@ -182,19 +196,14 @@ pub extern "C" fn fread(
 
 /// File write
 #[no_mangle]
-pub extern "C" fn fwrite(
-    ptr: *const u8,
-    size: usize,
-    nmemb: usize,
-    stream: *mut FILE,
-) -> usize {
+pub extern "C" fn fwrite(ptr: *const u8, size: usize, nmemb: usize, stream: *mut FILE) -> usize {
     if ptr.is_null() || stream.is_null() || size == 0 {
         return 0;
     }
-    
+
     let fd = unsafe { (*stream).fd };
     let total_size = size * nmemb;
-    
+
     let bytes_written = super::unistd::write(fd, ptr, total_size);
     if bytes_written < 0 {
         0

@@ -25,24 +25,30 @@ impl BumpAllocator {
             next: 0,
         }
     }
-    
+
     /// Initialize with heap bounds
+    ///
+    /// # Safety
+    ///
+    /// - `heap_start` must be a valid, aligned memory address
+    /// - The memory region `[heap_start, heap_start + heap_size)` must be available for heap use
+    /// - This function must be called exactly once before any allocations
     pub unsafe fn init(&mut self, heap_start: usize, heap_size: usize) {
         self.heap_start = heap_start;
         self.heap_end = heap_start + heap_size;
         self.next = heap_start;
     }
-    
+
     /// Allocate memory
     pub fn allocate(&mut self, layout: Layout) -> *mut u8 {
         let alloc_start = align_up(self.next, layout.align());
         let alloc_end = alloc_start + layout.size();
-        
+
         if alloc_end > self.heap_end {
             // Out of memory
             return null_mut();
         }
-        
+
         self.next = alloc_end;
         alloc_start as *mut u8
     }
@@ -65,8 +71,14 @@ impl GlobalAllocator {
             allocator: Mutex::new(BumpAllocator::new()),
         }
     }
-    
+
     /// Initialize the allocator
+    ///
+    /// # Safety
+    ///
+    /// - `heap_start` must be a valid, aligned memory address
+    /// - The memory region must be available for heap use
+    /// - Must be called exactly once before any allocations
     pub unsafe fn init(&self, heap_start: usize, heap_size: usize) {
         self.allocator.lock().init(heap_start, heap_size);
     }
@@ -76,7 +88,7 @@ unsafe impl GlobalAlloc for GlobalAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         self.allocator.lock().allocate(layout)
     }
-    
+
     unsafe fn dealloc(&self, _ptr: *mut u8, _layout: Layout) {
         // Bump allocator doesn't support deallocation
         // A real implementation would use a more sophisticated allocator
@@ -98,15 +110,15 @@ pub fn init() {
     // 1. Detect available memory from bootloader
     // 2. Set up page tables
     // 3. Initialize the heap
-    
+
     unsafe {
         #[cfg(not(test))]
         {
             let heap_start = 0x200000; // 2MB mark
-            let heap_size = 0x100000;  // 1MB heap
+            let heap_size = 0x100000; // 1MB heap
             ALLOCATOR.init(heap_start, heap_size);
         }
-        
+
         #[cfg(test)]
         {
             // For tests, use a static buffer
@@ -127,7 +139,7 @@ pub mod vm {
         /// End address of the VM map
         pub end: usize,
     }
-    
+
     impl VmMap {
         /// Create a new VM map
         pub fn new(start: usize, size: usize) -> Self {
@@ -151,7 +163,7 @@ impl PageManager {
             free_pages: Mutex::new(alloc::vec::Vec::new()),
         }
     }
-    
+
     /// Allocate a physical page
     pub fn allocate_page(&self) -> Result<crate::paging::PhysicalAddress, ()> {
         let mut pages = self.free_pages.lock();
@@ -162,13 +174,13 @@ impl PageManager {
             Ok(crate::paging::PhysicalAddress(0x300000)) // Use fixed address for now
         }
     }
-    
+
     /// Deallocate a physical page
     pub fn deallocate_page(&self, page: crate::paging::PhysicalAddress) {
         let mut pages = self.free_pages.lock();
         pages.push(page);
     }
-    
+
     /// Add a free page to the manager
     pub fn add_free_page(&self, page: crate::paging::PhysicalAddress) {
         let mut pages = self.free_pages.lock();
@@ -184,13 +196,13 @@ pub fn page_manager() -> &'static PageManager {
 }
 
 // Re-export types for convenience
-pub use crate::paging::{VirtualAddress, PhysicalAddress};
+pub use crate::paging::{PhysicalAddress, VirtualAddress};
 
 /// Allocate a stack of given size
 pub fn alloc_stack(size: usize) -> usize {
     // Align to page boundary
     let size = (size + crate::paging::PAGE_SIZE - 1) & !(crate::paging::PAGE_SIZE - 1);
-    
+
     // Allocate physical pages
     let mut addr = 0;
     for _ in 0..(size / crate::paging::PAGE_SIZE) {
@@ -202,8 +214,8 @@ pub fn alloc_stack(size: usize) -> usize {
             panic!("Out of memory allocating stack");
         }
     }
-    
-    addr + size  // Return top of stack (grows down)
+
+    addr + size // Return top of stack (grows down)
 }
 
 /// Free a stack
@@ -213,15 +225,16 @@ pub fn free_stack(stack_top: usize, size: usize) {
     let start_addr = stack_top - size;
 
     for i in 0..(size / crate::paging::PAGE_SIZE) {
-        page_manager().deallocate_page(crate::paging::PhysicalAddress(start_addr + i * crate::paging::PAGE_SIZE));
+        page_manager().deallocate_page(crate::paging::PhysicalAddress(
+            start_addr + i * crate::paging::PAGE_SIZE,
+        ));
     }
 }
-
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_align_up() {
         assert_eq!(align_up(0, 4), 0);
@@ -229,14 +242,14 @@ mod tests {
         assert_eq!(align_up(4, 4), 4);
         assert_eq!(align_up(5, 4), 8);
     }
-    
+
     #[test]
     fn test_bump_allocator() {
         let mut allocator = BumpAllocator::new();
         unsafe {
             allocator.init(0x1000, 0x1000);
         }
-        
+
         let layout = Layout::from_size_align(16, 8).unwrap();
         let ptr = allocator.allocate(layout);
         assert!(!ptr.is_null());

@@ -2,34 +2,34 @@
 //!
 //! Provides abstractions for both in-kernel and userspace drivers
 
-pub mod serial;
-pub mod scheme;
-pub mod virtio;
-pub mod uart;
-pub mod timer;
 pub mod interrupt;
+pub mod scheme;
+pub mod serial;
+pub mod timer;
+pub mod uart;
+pub mod virtio;
 
-use alloc::vec::Vec;
 use alloc::boxed::Box;
+use alloc::vec::Vec;
 use spin::Mutex;
 
 /// Driver trait that all drivers must implement
 pub trait Driver {
     /// Driver name
     fn name(&self) -> &str;
-    
+
     /// Initialize the driver
     fn init(&mut self) -> Result<(), DriverError>;
-    
+
     /// Read data from device
     fn read(&mut self, buffer: &mut [u8]) -> Result<usize, DriverError>;
-    
+
     /// Write data to device
     fn write(&mut self, buffer: &[u8]) -> Result<usize, DriverError>;
-    
+
     /// Control operations (ioctl-like)
     fn control(&mut self, cmd: u32, arg: usize) -> Result<usize, DriverError>;
-    
+
     /// Check if device is ready
     fn poll(&self) -> PollStatus;
 }
@@ -75,7 +75,7 @@ impl DeviceManager {
             drivers: Mutex::new(Vec::new()),
         }
     }
-    
+
     /// Register a driver
     pub fn register(&self, mut driver: Box<dyn Driver + Send>) -> Result<(), DriverError> {
         driver.init()?;
@@ -83,7 +83,7 @@ impl DeviceManager {
         drivers.push(driver);
         Ok(())
     }
-    
+
     /// Find driver by name
     pub fn find(&self, name: &str) -> Option<usize> {
         let drivers = self.drivers.lock();
@@ -100,31 +100,31 @@ pub fn register_driver(driver: Box<dyn Driver + Send>) -> Result<(), DriverError
 }
 
 // Advanced driver types for the new framework
-use heapless::{String, Vec as HeaplessVec, FnvIndexMap};
+use heapless::{FnvIndexMap, String, Vec as HeaplessVec};
 
 /// Enhanced device driver trait
 pub trait DeviceDriver: Send + Sync {
     /// Driver name
     fn name(&self) -> &str;
-    
+
     /// Driver version
     fn version(&self) -> (u32, u32, u32);
-    
+
     /// Initialize the driver
     fn init(&mut self) -> Result<(), DriverError>;
-    
+
     /// Shutdown the driver
     fn shutdown(&mut self) -> Result<(), DriverError>;
-    
+
     /// Handle device-specific operations
     fn ioctl(&mut self, cmd: u32, arg: usize) -> Result<usize, DriverError>;
-    
+
     /// Check if driver can handle this device
     fn can_handle(&self, device: &DeviceInfo) -> bool;
-    
+
     /// Bind to a specific device
     fn bind(&mut self, device: &DeviceInfo) -> Result<(), DriverError>;
-    
+
     /// Unbind from device
     fn unbind(&mut self, device: &DeviceInfo) -> Result<(), DriverError>;
 }
@@ -197,9 +197,11 @@ impl EnhancedDeviceManager {
             next_device_id: 1,
         }
     }
-    
+
     pub fn register_driver(&mut self, driver: Box<dyn DeviceDriver>) -> Result<(), DriverError> {
-        self.enhanced_drivers.push(driver).map_err(|_| DriverError::NoResources)
+        self.enhanced_drivers
+            .push(driver)
+            .map_err(|_| DriverError::NoResources)
     }
 }
 
@@ -222,9 +224,9 @@ pub fn init_enhanced_device_manager() -> Result<(), DriverError> {
         if (*core::ptr::addr_of!(ENHANCED_DEVICE_MANAGER)).is_some() {
             return Ok(());
         }
-        
+
         let mut manager = EnhancedDeviceManager::new();
-        
+
         // Register new drivers
         if let Ok(uart_driver) = create_uart_driver() {
             manager.register_driver(uart_driver)?;
@@ -236,7 +238,7 @@ pub fn init_enhanced_device_manager() -> Result<(), DriverError> {
         if let Ok(interrupt_driver) = create_interrupt_driver() {
             manager.register_driver(interrupt_driver)?;
         }
-        
+
         ENHANCED_DEVICE_MANAGER = Some(manager);
     }
     Ok(())
@@ -262,18 +264,18 @@ fn create_interrupt_driver() -> Result<Box<dyn DeviceDriver>, DriverError> {
 pub fn init() {
     // Initialize enhanced device manager
     let _ = init_enhanced_device_manager();
-    
+
     // Initialize serial console first
     serial::init();
-    
+
     // Initialize new pure Rust drivers
     let _ = uart::init();
     #[cfg(target_arch = "aarch64")]
     let _ = timer::init();
     let _ = interrupt::init();
-    
+
     // Initialize VirtIO drivers for QEMU
     virtio::init();
-    
+
     crate::println!("Driver subsystem initialized with enhanced framework");
 }

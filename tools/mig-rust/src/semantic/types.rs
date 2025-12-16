@@ -1,6 +1,6 @@
 //! Type resolution and validation for MIG types
 
-use crate::parser::ast::{TypeDecl, TypeSpec, Subsystem, Statement};
+use crate::parser::ast::{Statement, Subsystem, TypeDecl, TypeSpec};
 use std::collections::HashMap;
 
 /// Mach message type encoding
@@ -134,50 +134,113 @@ impl TypeResolver {
         // Port types
         self.add_port_type("mach_port_t", PortDisposition::CopySend, "mach_port_t");
         self.add_port_type("mach_port_name_t", PortDisposition::PortName, "mach_port_t");
-        self.add_port_type("mach_port_move_receive_t", PortDisposition::MoveReceive, "mach_port_t");
-        self.add_port_type("mach_port_copy_send_t", PortDisposition::CopySend, "mach_port_t");
-        self.add_port_type("mach_port_make_send_t", PortDisposition::MakeSend, "mach_port_t");
-        self.add_port_type("mach_port_move_send_t", PortDisposition::MoveSend, "mach_port_t");
-        self.add_port_type("mach_port_make_send_once_t", PortDisposition::MakeSendOnce, "mach_port_t");
-        self.add_port_type("mach_port_move_send_once_t", PortDisposition::MoveSendOnce, "mach_port_t");
-        self.add_port_type("mach_port_receive_t", PortDisposition::PortReceive, "mach_port_t");
+        self.add_port_type(
+            "mach_port_move_receive_t",
+            PortDisposition::MoveReceive,
+            "mach_port_t",
+        );
+        self.add_port_type(
+            "mach_port_copy_send_t",
+            PortDisposition::CopySend,
+            "mach_port_t",
+        );
+        self.add_port_type(
+            "mach_port_make_send_t",
+            PortDisposition::MakeSend,
+            "mach_port_t",
+        );
+        self.add_port_type(
+            "mach_port_move_send_t",
+            PortDisposition::MoveSend,
+            "mach_port_t",
+        );
+        self.add_port_type(
+            "mach_port_make_send_once_t",
+            PortDisposition::MakeSendOnce,
+            "mach_port_t",
+        );
+        self.add_port_type(
+            "mach_port_move_send_once_t",
+            PortDisposition::MoveSendOnce,
+            "mach_port_t",
+        );
+        self.add_port_type(
+            "mach_port_receive_t",
+            PortDisposition::PortReceive,
+            "mach_port_t",
+        );
         self.add_port_type("mach_port_send_t", PortDisposition::PortSend, "mach_port_t");
-        self.add_port_type("mach_port_send_once_t", PortDisposition::PortSendOnce, "mach_port_t");
+        self.add_port_type(
+            "mach_port_send_once_t",
+            PortDisposition::PortSendOnce,
+            "mach_port_t",
+        );
 
         // Other common types
-        self.add_primitive("kern_return_t", MachMsgType::TypeInteger32, "kern_return_t", 4);
-        self.add_primitive("mach_msg_type_name_t", MachMsgType::TypeInteger32, "mach_msg_type_name_t", 4);
-        self.add_primitive("mach_msg_timeout_t", MachMsgType::TypeInteger32, "mach_msg_timeout_t", 4);
-        self.add_primitive("mach_msg_option_t", MachMsgType::TypeInteger32, "mach_msg_option_t", 4);
-        self.add_primitive("mach_port_seqno_t", MachMsgType::TypeInteger32, "mach_port_seqno_t", 4);
+        self.add_primitive(
+            "kern_return_t",
+            MachMsgType::TypeInteger32,
+            "kern_return_t",
+            4,
+        );
+        self.add_primitive(
+            "mach_msg_type_name_t",
+            MachMsgType::TypeInteger32,
+            "mach_msg_type_name_t",
+            4,
+        );
+        self.add_primitive(
+            "mach_msg_timeout_t",
+            MachMsgType::TypeInteger32,
+            "mach_msg_timeout_t",
+            4,
+        );
+        self.add_primitive(
+            "mach_msg_option_t",
+            MachMsgType::TypeInteger32,
+            "mach_msg_option_t",
+            4,
+        );
+        self.add_primitive(
+            "mach_port_seqno_t",
+            MachMsgType::TypeInteger32,
+            "mach_port_seqno_t",
+            4,
+        );
     }
 
     /// Add a primitive type
     fn add_primitive(&mut self, name: &str, mach_type: MachMsgType, c_type: &str, size: usize) {
-        self.types.insert(name.to_string(), ResolvedType {
-            name: name.to_string(),
-            mach_type,
-            c_type: Some(c_type.to_string()),
-            size: TypeSize::Fixed(size),
-            is_array: false,
-            array_element: None,
-            array_size: None,
-            is_polymorphic: false,
-        });
+        self.types.insert(
+            name.to_string(),
+            ResolvedType {
+                name: name.to_string(),
+                mach_type,
+                c_type: Some(c_type.to_string()),
+                size: TypeSize::Fixed(size),
+                is_array: false,
+                array_element: None,
+                array_size: None,
+                is_polymorphic: false,
+            },
+        );
     }
 
     /// Add a port type
     fn add_port_type(&mut self, name: &str, disposition: PortDisposition, c_type: &str) {
-        self.types.insert(name.to_string(), ResolvedType {
-            name: name.to_string(),
-            mach_type: MachMsgType::TypePort(disposition),
-            c_type: Some(c_type.to_string()),
-            size: TypeSize::Fixed(4), // Port names are 32-bit
-            is_array: false,
-            array_element: None,
-            array_size: None,
-            is_polymorphic: false,
-        });
+        self.types.insert(
+            name.to_string(),
+            ResolvedType {
+                name: name.to_string(),
+                mach_type: MachMsgType::TypePort(disposition),
+                c_type: Some(c_type.to_string()),
+                size: TypeSize::Fixed(4), // Port names are 32-bit
+                is_array: false,
+                array_element: None,
+                array_size: None,
+                is_polymorphic: false,
+            },
+        );
     }
 
     /// Resolve types from a subsystem
@@ -193,7 +256,7 @@ impl TypeResolver {
 
     /// Resolve a type declaration
     fn resolve_type_decl(&mut self, decl: &TypeDecl) -> Result<(), super::SemanticError> {
-        use crate::parser::ast::{ArraySize};
+        use crate::parser::ast::ArraySize;
 
         let resolved = match &decl.spec {
             TypeSpec::Basic(base_name) => {
@@ -234,7 +297,10 @@ impl TypeResolver {
                     ResolvedType {
                         name: decl.name.clone(),
                         mach_type: elem_type.mach_type,
-                        c_type: Some(format!("{}*", elem_type.c_type.as_ref().unwrap_or(elem_name))),
+                        c_type: Some(format!(
+                            "{}*",
+                            elem_type.c_type.as_ref().unwrap_or(elem_name)
+                        )),
                         size: type_size,
                         is_array: true,
                         array_element: Some(Box::new(elem_type)),
@@ -269,10 +335,12 @@ impl TypeResolver {
 
     /// Look up a type by name
     pub fn lookup(&self, name: &str) -> Result<&ResolvedType, super::SemanticError> {
-        self.types.get(name).ok_or_else(|| super::SemanticError::UndefinedType {
-            name: name.to_string(),
-            location: "type lookup".to_string(),
-        })
+        self.types
+            .get(name)
+            .ok_or_else(|| super::SemanticError::UndefinedType {
+                name: name.to_string(),
+                location: "type lookup".to_string(),
+            })
     }
 
     /// Get the C type for a type name

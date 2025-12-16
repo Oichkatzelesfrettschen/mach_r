@@ -1,14 +1,30 @@
 //! POSIX string.h - string manipulation functions
+//!
+//! # Safety
+//!
+//! All functions in this module are FFI-compatible C library functions.
+//! They accept raw pointers and are designed to be called from C code.
+//! Callers must ensure:
+//! - Pointers are valid and properly aligned
+//! - Buffers have sufficient size for the operation
+//! - String pointers point to null-terminated strings where required
+//!
+//! Note: All `#[no_mangle]` exports are disabled in test mode to avoid
+//! conflicting with system libc functions.
 
+#![allow(clippy::not_unsafe_ptr_arg_deref)]
+
+#[cfg(not(test))]
 use core::ptr;
 
 /// String length
+#[cfg(not(test))]
 #[no_mangle]
 pub extern "C" fn strlen(s: *const u8) -> usize {
     if s.is_null() {
         return 0;
     }
-    
+
     let mut len = 0;
     unsafe {
         while *s.add(len) != 0 {
@@ -19,12 +35,13 @@ pub extern "C" fn strlen(s: *const u8) -> usize {
 }
 
 /// String copy
+#[cfg(not(test))]
 #[no_mangle]
 pub extern "C" fn strcpy(dest: *mut u8, src: *const u8) -> *mut u8 {
     if dest.is_null() || src.is_null() {
         return dest;
     }
-    
+
     let mut i = 0;
     unsafe {
         loop {
@@ -39,12 +56,13 @@ pub extern "C" fn strcpy(dest: *mut u8, src: *const u8) -> *mut u8 {
 }
 
 /// String copy with limit
+#[cfg(not(test))]
 #[no_mangle]
 pub extern "C" fn strncpy(dest: *mut u8, src: *const u8, n: usize) -> *mut u8 {
     if dest.is_null() || src.is_null() {
         return dest;
     }
-    
+
     let mut i = 0;
     unsafe {
         while i < n {
@@ -64,18 +82,20 @@ pub extern "C" fn strncpy(dest: *mut u8, src: *const u8, n: usize) -> *mut u8 {
 }
 
 /// String concatenation
+#[cfg(not(test))]
 #[no_mangle]
 pub extern "C" fn strcat(dest: *mut u8, src: *const u8) -> *mut u8 {
     if dest.is_null() || src.is_null() {
         return dest;
     }
-    
+
     let dest_len = strlen(dest);
     strcpy(unsafe { dest.add(dest_len) }, src);
     dest
 }
 
 /// String comparison
+#[cfg(not(test))]
 #[no_mangle]
 pub extern "C" fn strcmp(s1: *const u8, s2: *const u8) -> i32 {
     if s1.is_null() && s2.is_null() {
@@ -87,21 +107,21 @@ pub extern "C" fn strcmp(s1: *const u8, s2: *const u8) -> i32 {
     if s2.is_null() {
         return 1;
     }
-    
+
     let mut i = 0;
     unsafe {
         loop {
             let c1 = *s1.add(i);
             let c2 = *s2.add(i);
-            
+
             if c1 != c2 {
                 return (c1 as i32) - (c2 as i32);
             }
-            
+
             if c1 == 0 {
                 break;
             }
-            
+
             i += 1;
         }
     }
@@ -109,12 +129,13 @@ pub extern "C" fn strcmp(s1: *const u8, s2: *const u8) -> i32 {
 }
 
 /// String comparison with limit
+#[cfg(not(test))]
 #[no_mangle]
 pub extern "C" fn strncmp(s1: *const u8, s2: *const u8, n: usize) -> i32 {
     if n == 0 {
         return 0;
     }
-    
+
     if s1.is_null() && s2.is_null() {
         return 0;
     }
@@ -124,21 +145,21 @@ pub extern "C" fn strncmp(s1: *const u8, s2: *const u8, n: usize) -> i32 {
     if s2.is_null() {
         return 1;
     }
-    
+
     let mut i = 0;
     unsafe {
         while i < n {
             let c1 = *s1.add(i);
             let c2 = *s2.add(i);
-            
+
             if c1 != c2 {
                 return (c1 as i32) - (c2 as i32);
             }
-            
+
             if c1 == 0 {
                 break;
             }
-            
+
             i += 1;
         }
     }
@@ -146,15 +167,16 @@ pub extern "C" fn strncmp(s1: *const u8, s2: *const u8, n: usize) -> i32 {
 }
 
 /// Find character in string
+#[cfg(not(test))]
 #[no_mangle]
 pub extern "C" fn strchr(s: *const u8, c: i32) -> *mut u8 {
     if s.is_null() {
         return ptr::null_mut();
     }
-    
+
     let target = c as u8;
     let mut i = 0;
-    
+
     unsafe {
         loop {
             let current = *s.add(i);
@@ -167,27 +189,28 @@ pub extern "C" fn strchr(s: *const u8, c: i32) -> *mut u8 {
             i += 1;
         }
     }
-    
+
     ptr::null_mut()
 }
 
 /// Find substring in string
+#[cfg(not(test))]
 #[no_mangle]
 pub extern "C" fn strstr(haystack: *const u8, needle: *const u8) -> *mut u8 {
     if haystack.is_null() || needle.is_null() {
         return ptr::null_mut();
     }
-    
+
     let needle_len = strlen(needle);
     if needle_len == 0 {
         return haystack as *mut u8;
     }
-    
+
     let haystack_len = strlen(haystack);
     if needle_len > haystack_len {
         return ptr::null_mut();
     }
-    
+
     unsafe {
         for i in 0..=(haystack_len - needle_len) {
             if strncmp(haystack.add(i), needle, needle_len) == 0 {
@@ -195,33 +218,35 @@ pub extern "C" fn strstr(haystack: *const u8, needle: *const u8) -> *mut u8 {
             }
         }
     }
-    
+
     ptr::null_mut()
 }
 
 /// Memory copy
+#[cfg(not(test))]
 #[no_mangle]
 pub extern "C" fn memcpy(dest: *mut u8, src: *const u8, n: usize) -> *mut u8 {
     if dest.is_null() || src.is_null() || n == 0 {
         return dest;
     }
-    
+
     unsafe {
         for i in 0..n {
             *dest.add(i) = *src.add(i);
         }
     }
-    
+
     dest
 }
 
 /// Memory move (handles overlapping regions)
+#[cfg(not(test))]
 #[no_mangle]
 pub extern "C" fn memmove(dest: *mut u8, src: *const u8, n: usize) -> *mut u8 {
     if dest.is_null() || src.is_null() || n == 0 {
         return dest;
     }
-    
+
     unsafe {
         if dest < src as *mut u8 {
             // Copy forward
@@ -235,34 +260,36 @@ pub extern "C" fn memmove(dest: *mut u8, src: *const u8, n: usize) -> *mut u8 {
             }
         }
     }
-    
+
     dest
 }
 
 /// Memory set
+#[cfg(not(test))]
 #[no_mangle]
 pub extern "C" fn memset(s: *mut u8, c: i32, n: usize) -> *mut u8 {
     if s.is_null() || n == 0 {
         return s;
     }
-    
+
     let value = c as u8;
     unsafe {
         for i in 0..n {
             *s.add(i) = value;
         }
     }
-    
+
     s
 }
 
 /// Memory compare
+#[cfg(not(test))]
 #[no_mangle]
 pub extern "C" fn memcmp(s1: *const u8, s2: *const u8, n: usize) -> i32 {
     if n == 0 {
         return 0;
     }
-    
+
     if s1.is_null() && s2.is_null() {
         return 0;
     }
@@ -272,7 +299,7 @@ pub extern "C" fn memcmp(s1: *const u8, s2: *const u8, n: usize) -> i32 {
     if s2.is_null() {
         return 1;
     }
-    
+
     unsafe {
         for i in 0..n {
             let c1 = *s1.add(i);
@@ -282,6 +309,6 @@ pub extern "C" fn memcmp(s1: *const u8, s2: *const u8, n: usize) -> i32 {
             }
         }
     }
-    
+
     0
 }

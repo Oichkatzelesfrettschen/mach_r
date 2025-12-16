@@ -1,7 +1,7 @@
 //! Integration tests for Rust code generation
 
-use mig_rust::*;
 use mig_rust::codegen::rust_stubs::RustStubGenerator;
+use mig_rust::*;
 
 #[test]
 fn test_simple_rust_generation() {
@@ -48,8 +48,8 @@ fn test_array_rust_generation() {
     let rust_code = generator.generate(&analyzed).expect("codegen failed");
 
     // Should contain array types
-    assert!(rust_code.contains("&[") || rust_code.contains("data: ["));  // Array syntax
-    assert!(rust_code.contains("ArrayTooLarge"));  // Error handling
+    assert!(rust_code.contains("&[") || rust_code.contains("data: [")); // Array syntax
+    assert!(rust_code.contains("ArrayTooLarge")); // Error handling
 
     println!("Generated Rust code with arrays:\n{}", rust_code);
 }

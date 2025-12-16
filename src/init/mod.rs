@@ -1,11 +1,11 @@
 //! Init system implementation for Mach_R
 //! Pure Rust init system inspired by systemd and modern init systems
 
-use heapless::{String, Vec, FnvIndexMap};
+use heapless::{FnvIndexMap, String, Vec};
 
+pub mod process;
 pub mod service;
 pub mod supervisor;
-pub mod process;
 
 /// Maximum number of services
 const MAX_SERVICES: usize = 64;
@@ -86,8 +86,10 @@ impl ServiceConfig {
     /// Create a new service configuration
     pub fn new(name: &str) -> Result<Self, &'static str> {
         let mut service_name = String::new();
-        service_name.push_str(name).map_err(|_| "Service name too long")?;
-        
+        service_name
+            .push_str(name)
+            .map_err(|_| "Service name too long")?;
+
         Ok(Self {
             name: service_name,
             service_type: ServiceType::Simple,
@@ -106,31 +108,41 @@ impl ServiceConfig {
             enabled: false,
         })
     }
-    
+
     /// Set the command to execute
     pub fn set_exec_start(&mut self, command: &str) -> Result<(), &'static str> {
         self.exec_start.clear();
-        self.exec_start.push_str(command).map_err(|_| "Command too long")?;
+        self.exec_start
+            .push_str(command)
+            .map_err(|_| "Command too long")?;
         Ok(())
     }
-    
+
     /// Add a dependency
     pub fn add_requires(&mut self, service: &str) -> Result<(), &'static str> {
         let mut dep = String::new();
-        dep.push_str(service).map_err(|_| "Dependency name too long")?;
-        self.requires.push(dep).map_err(|_| "Too many dependencies")?;
+        dep.push_str(service)
+            .map_err(|_| "Dependency name too long")?;
+        self.requires
+            .push(dep)
+            .map_err(|_| "Too many dependencies")?;
         Ok(())
     }
-    
+
     /// Add environment variable
     pub fn add_env(&mut self, key: &str, value: &str) -> Result<(), &'static str> {
         let mut env_key = String::new();
-        env_key.push_str(key).map_err(|_| "Environment key too long")?;
-        
+        env_key
+            .push_str(key)
+            .map_err(|_| "Environment key too long")?;
+
         let mut env_value = String::new();
-        env_value.push_str(value).map_err(|_| "Environment value too long")?;
-        
-        self.environment.insert(env_key, env_value)
+        env_value
+            .push_str(value)
+            .map_err(|_| "Environment value too long")?;
+
+        self.environment
+            .insert(env_key, env_value)
             .map_err(|_| "Too many environment variables")?;
         Ok(())
     }
@@ -178,7 +190,7 @@ impl ServiceRuntime {
             last_exit_code: None,
         }
     }
-    
+
     /// Check if service needs restart based on policy
     pub fn should_restart(&self, exit_code: i32) -> bool {
         match self.config.restart {
@@ -228,36 +240,42 @@ impl InitSystem {
             supervisor: supervisor::ProcessSupervisor::new(),
         }
     }
-    
+
     /// Register a service
     pub fn register_service(&mut self, config: ServiceConfig) -> Result<(), &'static str> {
         let service_name = config.name.clone();
         let runtime = ServiceRuntime::new(config);
-        
+
         let index = self.services.len();
-        self.services.push(runtime).map_err(|_| "Too many services")?;
-        self.service_index.insert(service_name, index)
+        self.services
+            .push(runtime)
+            .map_err(|_| "Too many services")?;
+        self.service_index
+            .insert(service_name, index)
             .map_err(|_| "Service index full")?;
-        
+
         Ok(())
     }
-    
+
     /// Start a service
     pub fn start_service(&mut self, name: &str) -> Result<(), &'static str> {
         let index = self.find_service_index(name)?;
-        
+
         // Check dependencies first
         self.start_dependencies(index)?;
-        
+
         let service = &mut self.services[index];
         if service.state == ServiceState::Running {
             return Ok(()); // Already running
         }
-        
+
         service.state = ServiceState::Starting;
-        
+
         // Start the actual process
-        match self.supervisor.start_process(&service.config.exec_start, &service.config.environment) {
+        match self
+            .supervisor
+            .start_process(&service.config.exec_start, &service.config.environment)
+        {
             Ok(pid) => {
                 service.pid = Some(pid);
                 service.state = ServiceState::Running;
@@ -270,96 +288,101 @@ impl InitSystem {
             }
         }
     }
-    
+
     /// Stop a service
     pub fn stop_service(&mut self, name: &str) -> Result<(), &'static str> {
         let index = self.find_service_index(name)?;
         let service = &mut self.services[index];
-        
+
         if service.state != ServiceState::Running {
             return Ok(()); // Not running
         }
-        
+
         service.state = ServiceState::Stopping;
-        
+
         if let Some(pid) = service.pid {
             // Send termination signal
             self.supervisor.stop_process(pid)?;
             service.pid = None;
         }
-        
+
         service.state = ServiceState::Stopped;
         Ok(())
     }
-    
+
     /// Restart a service
     pub fn restart_service(&mut self, name: &str) -> Result<(), &'static str> {
         let index = self.find_service_index(name)?;
         self.services[index].state = ServiceState::Restarting;
-        
+
         self.stop_service(name)?;
         self.start_service(name)?;
-        
+
         self.services[index].restart_count += 1;
         Ok(())
     }
-    
+
     /// Start dependencies for a service
     fn start_dependencies(&mut self, service_index: usize) -> Result<(), &'static str> {
         // Get list of required services
         let mut required_services = Vec::<String<MAX_SERVICE_NAME>, 8>::new();
         for dep in &self.services[service_index].config.requires {
-            required_services.push(dep.clone()).map_err(|_| "Too many dependencies")?;
+            required_services
+                .push(dep.clone())
+                .map_err(|_| "Too many dependencies")?;
         }
-        
+
         // Start each required service
         for dep_name in &required_services {
             self.start_service(dep_name)?;
         }
-        
+
         Ok(())
     }
-    
+
     /// Find service index by name
     fn find_service_index(&self, name: &str) -> Result<usize, &'static str> {
         // Convert str to String for lookup
         let mut service_name: String<MAX_SERVICE_NAME> = String::new();
-        service_name.push_str(name).map_err(|_| "Service name too long")?;
-        self.service_index.get(&service_name)
+        service_name
+            .push_str(name)
+            .map_err(|_| "Service name too long")?;
+        self.service_index
+            .get(&service_name)
             .copied()
             .ok_or("Service not found")
     }
-    
+
     /// Get service status
     pub fn get_service_status(&self, name: &str) -> Result<&ServiceRuntime, &'static str> {
         let index = self.find_service_index(name)?;
         Ok(&self.services[index])
     }
-    
+
     /// List all services
     pub fn list_services(&self) -> &Vec<ServiceRuntime, MAX_SERVICES> {
         &self.services
     }
-    
+
     /// Enable service for auto-start
     pub fn enable_service(&mut self, name: &str) -> Result<(), &'static str> {
         let index = self.find_service_index(name)?;
         self.services[index].config.enabled = true;
         Ok(())
     }
-    
+
     /// Disable service auto-start
     pub fn disable_service(&mut self, name: &str) -> Result<(), &'static str> {
         let index = self.find_service_index(name)?;
         self.services[index].config.enabled = false;
         Ok(())
     }
-    
+
     /// Boot system - start all enabled services
     pub fn boot_system(&mut self) -> Result<(), &'static str> {
         self.system_state = SystemState::Booting;
         self.boot_time = get_current_time();
-        
+
         // Start enabled services in dependency order
         // TODO: implement proper dependency resolution
         for i in 0..self.services.len() {
@@ -368,15 +391,15 @@ impl InitSystem {
                 self.start_service(&service_name)?;
             }
         }
-        
+
         self.system_state = SystemState::Running;
         Ok(())
     }
-    
+
     /// Shutdown system
     pub fn shutdown_system(&mut self) -> Result<(), &'static str> {
         self.system_state = SystemState::Shutdown;
-        
+
         // Stop all running services
         for i in 0..self.services.len() {
             if self.services[i].state == ServiceState::Running {
@@ -384,15 +407,15 @@ impl InitSystem {
                 self.stop_service(&service_name)?;
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Process management - called periodically to handle process events
     pub fn process_events(&mut self) -> Result<(), &'static str> {
         // Check for dead processes and handle restarts
         self.supervisor.reap_children()?;
-        
+
         // Handle service restarts
         for i in 0..self.services.len() {
             let service = &mut self.services[i];
@@ -406,7 +429,7 @@ impl InitSystem {
                 }
             }
         }
-        
+
         Ok(())
     }
 }
@@ -422,14 +445,14 @@ static mut INIT_SYSTEM: Option<InitSystem> = None;
 /// Initialize the init system
 pub fn init() -> Result<(), &'static str> {
     let mut init_system = InitSystem::new();
-    
+
     // Register default services
     register_default_services(&mut init_system)?;
-    
+
     unsafe {
         INIT_SYSTEM = Some(init_system);
     }
-    
+
     Ok(())
 }
 
@@ -442,7 +465,7 @@ fn register_default_services(init_system: &mut InitSystem) -> Result<(), &'stati
     shell_config.restart = RestartPolicy::Always;
     shell_config.enabled = true;
     init_system.register_service(shell_config)?;
-    
+
     // SSH service
     let mut ssh_config = ServiceConfig::new("ssh")?;
     ssh_config.set_exec_start("/usr/sbin/sshd -D")?;
@@ -450,21 +473,21 @@ fn register_default_services(init_system: &mut InitSystem) -> Result<(), &'stati
     ssh_config.restart = RestartPolicy::Always;
     ssh_config.enabled = true;
     init_system.register_service(ssh_config)?;
-    
+
     // Network service
     let mut network_config = ServiceConfig::new("network")?;
     network_config.set_exec_start("/sbin/network_init")?;
     network_config.service_type = ServiceType::Oneshot;
     network_config.enabled = true;
     init_system.register_service(network_config)?;
-    
+
     // Filesystem service
     let mut fs_config = ServiceConfig::new("filesystem")?;
     fs_config.set_exec_start("/sbin/mount_all")?;
     fs_config.service_type = ServiceType::Oneshot;
     fs_config.enabled = true;
     init_system.register_service(fs_config)?;
-    
+
     Ok(())
 }
 
@@ -480,14 +503,14 @@ pub fn start_init() -> ! {
         if let Err(e) = init_system.boot_system() {
             panic!("Failed to boot system: {}", e);
         }
-        
+
         // Main init loop - process events and manage services
         loop {
             if let Err(e) = init_system.process_events() {
                 // Log error but continue running
                 crate::println!("Init system error: {}", e);
             }
-            
+
             // Small delay to prevent busy loop
             core::hint::spin_loop();
         }

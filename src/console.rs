@@ -17,7 +17,7 @@ impl Uart {
     const fn new(base: usize) -> Self {
         Self { base }
     }
-    
+
     unsafe fn putc(&self, c: u8) {
         let ptr = self.base as *mut u8;
         ptr.write_volatile(c);
@@ -40,7 +40,7 @@ impl Console {
             buffer: heapless::String::new(),
         }
     }
-    
+
     /// Write a byte to the console
     pub fn write_byte(&mut self, byte: u8) {
         #[cfg(test)]
@@ -50,7 +50,7 @@ impl Console {
                 let _ = self.buffer.push(byte as char);
             }
         }
-        
+
         #[cfg(not(test))]
         {
             // In kernel mode, write to UART hardware
@@ -59,22 +59,23 @@ impl Console {
             }
         }
     }
-    
+
     /// Write a string to the console
     pub fn write_str(&mut self, s: &str) {
         for byte in s.bytes() {
-            if byte == b'\n' { // Handle newlines for serial output
+            if byte == b'\n' {
+                // Handle newlines for serial output
                 self.write_byte(b'\r');
             }
             self.write_byte(byte);
         }
     }
-    
+
     /// Clear the console
     pub fn clear(&mut self) {
         #[cfg(test)]
         self.buffer.clear();
-        
+
         #[cfg(not(test))]
         {
             // Clear screen implementation (platform-specific, not implemented for serial)
@@ -161,7 +162,7 @@ pub fn process_keyboard(scancode: u8) {
         0x0E => 0x08,  // Backspace
         _ => 0,
     };
-    
+
     if ascii != 0 {
         // In real implementation, would add to keyboard buffer
         // For now, just echo to console
@@ -172,14 +173,14 @@ pub fn process_keyboard(scancode: u8) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_console_write() {
         let mut console = Console::new();
         console.write_str("Hello, Mach_R!");
         assert!(console.buffer.contains("Hello, Mach_R!"));
     }
-    
+
     #[test]
     fn test_console_formatting() {
         let mut console = Console::new();

@@ -3,10 +3,10 @@
 //! Messages are the data transferred through ports. They can contain
 //! simple data, out-of-line memory, and port rights.
 
+use crate::mach::abi as mach_abi;
+use crate::types::PortId;
 use alloc::vec::Vec as StdVec;
 use heapless::Vec;
-use crate::types::PortId;
-use crate::mach::abi as mach_abi;
 
 /// Message type codes
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -85,10 +85,12 @@ impl Message {
         if data.len() > 256 {
             return Err("Data too large for inline message");
         }
-        
+
         let mut inline_data = Vec::new();
-        inline_data.extend_from_slice(data).map_err(|_| "Failed to copy data")?;
-        
+        inline_data
+            .extend_from_slice(data)
+            .map_err(|_| "Failed to copy data")?;
+
         Ok(Message {
             header: MessageHeader {
                 size: data.len() as u32,
@@ -101,7 +103,7 @@ impl Message {
             body: MessageBody::Inline(inline_data),
         })
     }
-    
+
     /// Create an out-of-line message for large data
     pub fn new_out_of_line(remote_port: PortId, data: StdVec<u8>) -> Self {
         Message {
@@ -122,7 +124,7 @@ impl Message {
         self.header.local_port = Some(reply_port);
         self
     }
-    
+
     /// Create a port right transfer message
     pub fn new_port_transfer(
         remote_port: PortId,
@@ -149,17 +151,17 @@ impl Message {
     pub fn size(&self) -> usize {
         self.header.size as usize
     }
-    
+
     /// Check if message is a notification
     pub fn is_notification(&self) -> bool {
         self.header.msg_type == MessageType::Notification
     }
-    
+
     /// Get the destination port
     pub fn remote_port(&self) -> PortId {
         self.header.remote_port.unwrap_or(PortId(0))
     }
-    
+
     /// Get message data
     pub fn data(&self) -> &[u8] {
         match &self.body {
@@ -173,8 +175,16 @@ impl Message {
     /// Compute a minimal Mach-like header bits field for compatibility
     pub fn header_bits(&self) -> mach_abi::MachMsgBits {
         // For now we only encode presence of remote/local port names (non-zero)
-        let remote = if self.header.remote_port.is_some() { 1 } else { 0 };
-        let local = if self.header.local_port.is_some() { 1 } else { 0 };
+        let remote = if self.header.remote_port.is_some() {
+            1
+        } else {
+            0
+        };
+        let local = if self.header.local_port.is_some() {
+            1
+        } else {
+            0
+        };
         mach_abi::mach_msgh_bits(remote, local)
     }
 }
@@ -192,7 +202,6 @@ impl PortRightType {
     }
 }
 
-
 /// Message queue for buffering (simplified version)
 pub struct MessageBuffer {
     messages: spin::Mutex<StdVec<Message>>,
@@ -207,7 +216,7 @@ impl MessageBuffer {
             max_size,
         }
     }
-    
+
     /// Add a message to the buffer
     pub fn push(&self, msg: Message) -> Result<(), Message> {
         let mut buffer = self.messages.lock();
@@ -217,7 +226,7 @@ impl MessageBuffer {
         buffer.push(msg);
         Ok(())
     }
-    
+
     /// Remove and return the first message
     pub fn pop(&self) -> Option<Message> {
         let mut buffer = self.messages.lock();
@@ -227,7 +236,7 @@ impl MessageBuffer {
             Some(buffer.remove(0))
         }
     }
-    
+
     /// Check if buffer is empty
     pub fn is_empty(&self) -> bool {
         self.messages.lock().is_empty()
@@ -237,31 +246,31 @@ impl MessageBuffer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_inline_message() {
         let port_id = PortId(1);
         let data = b"Hello, Mach_R!";
-        
+
         let msg = Message::new_inline(port_id, data).unwrap();
         assert_eq!(msg.size(), data.len());
-        
+
         if let MessageBody::Inline(ref body_data) = msg.body {
             assert_eq!(body_data.as_slice(), data);
         } else {
             panic!("Expected inline message");
         }
     }
-    
+
     #[test]
     fn test_message_buffer() {
         let buffer = MessageBuffer::new(10);
         let port_id = PortId(1);
-        
+
         let msg = Message::new_inline(port_id, b"Test").unwrap();
         assert!(buffer.push(msg).is_ok());
         assert!(!buffer.is_empty());
-        
+
         let retrieved = buffer.pop().unwrap();
         assert_eq!(retrieved.size(), 4);
         assert!(buffer.is_empty());

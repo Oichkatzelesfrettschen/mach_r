@@ -1,8 +1,8 @@
 //! Token stream filtering based on preprocessor conditionals
 
-use crate::lexer::tokens::Token;
-use super::expr::{PreprocessorExpr, parse_directive};
+use super::expr::{parse_directive, PreprocessorExpr};
 use super::symbols::SymbolTable;
+use crate::lexer::tokens::Token;
 
 /// Preprocessor error
 #[derive(Debug, Clone)]
@@ -60,7 +60,9 @@ impl PreprocessorFilter {
 
     /// Check if we're currently in an active block
     fn is_active(&self) -> bool {
-        self.block_stack.iter().all(|block| block.state == BlockState::Active)
+        self.block_stack
+            .iter()
+            .all(|block| block.state == BlockState::Active)
     }
 
     /// Process tokens through the preprocessor
@@ -225,7 +227,7 @@ impl PreprocessorFilter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lexer::tokens::{Token, Symbol, Keyword};
+    use crate::lexer::tokens::{Keyword, Symbol, Token};
 
     fn make_tokens() -> Vec<Token> {
         vec![

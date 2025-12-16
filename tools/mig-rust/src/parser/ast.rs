@@ -67,13 +67,13 @@ pub enum TypeSpec {
     Struct(Vec<StructField>),
 
     /// Struct array: struct[count] of type
-    StructArray {
-        count: u32,
-        element: Box<TypeSpec>,
-    },
+    StructArray { count: u32, element: Box<TypeSpec> },
 
     /// C string
-    CString { max_size: Option<u32>, varying: bool },
+    CString {
+        max_size: Option<u32>,
+        varying: bool,
+    },
 }
 
 /// Array size specification
@@ -153,7 +153,7 @@ pub struct Import {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImportKind {
-    Normal,  // import
-    User,    // uimport
-    Server,  // simport
+    Normal, // import
+    User,   // uimport
+    Server, // simport
 }

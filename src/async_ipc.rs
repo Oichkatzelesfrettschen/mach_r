@@ -3,8 +3,8 @@
 //! Provides non-blocking message operations using futures-like patterns
 //! without requiring std::future (since we're no_std).
 
-use alloc::sync::Arc;
 use alloc::collections::VecDeque;
+use alloc::sync::Arc;
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 // For no_std, we need a custom async implementation
 use spin::Mutex;
@@ -26,7 +26,7 @@ impl Waker {
     pub fn wake(&self) {
         // Wake the task
     }
-    
+
     pub fn wake_by_ref(&self) {
         // Wake the task
     }
@@ -42,9 +42,9 @@ impl<'a> Context<'a> {
         self.waker.clone()
     }
 }
-use crate::types::{PortId, TaskId};
-use crate::port::Port;
 use crate::message::Message;
+use crate::port::Port;
+use crate::types::{PortId, TaskId};
 
 /// Result type for async operations
 pub type AsyncResult<T> = Result<T, AsyncError>;
@@ -83,7 +83,7 @@ impl AsyncReceive {
             complete: AtomicBool::new(false),
         }
     }
-    
+
     /// Poll for message availability
     pub fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Option<Message>> {
         // Check if message is available
@@ -91,10 +91,10 @@ impl AsyncReceive {
             self.complete.store(true, Ordering::Release);
             return Poll::Ready(Some(msg));
         }
-        
+
         // Store waker for later notification
         self.waker = Some(cx.waker().clone());
-        
+
         // Check once more (race condition prevention)
         if let Some(msg) = self.port.receive() {
             self.complete.store(true, Ordering::Release);
@@ -103,7 +103,7 @@ impl AsyncReceive {
             Poll::Pending
         }
     }
-    
+
     /// Wake the waiting task
     pub fn wake(&self) {
         if let Some(ref waker) = self.waker {
@@ -128,7 +128,7 @@ impl AsyncSend {
     const PENDING: usize = 0;
     const COMPLETE: usize = 1;
     const FAILED: usize = 2;
-    
+
     /// Create a new async send operation
     pub fn new(port: Arc<Port>, message: Message) -> Self {
         AsyncSend {
@@ -138,7 +138,7 @@ impl AsyncSend {
             status: AtomicUsize::new(Self::PENDING),
         }
     }
-    
+
     /// Poll for send completion
     pub fn poll(&mut self, cx: &mut Context<'_>) -> Poll<AsyncResult<()>> {
         // Check current status
@@ -147,7 +147,7 @@ impl AsyncSend {
             Self::FAILED => return Poll::Ready(Err(AsyncError::PortDead)),
             _ => {}
         }
-        
+
         // Try to send message
         if let Some(msg) = self.message.take() {
             match self.port.send(msg) {
@@ -158,7 +158,7 @@ impl AsyncSend {
                 Err(returned_msg) => {
                     // Put message back for retry
                     self.message = Some(returned_msg);
-                    
+
                     // Check if port is dead
                     if !self.port.is_active() {
                         self.status.store(Self::FAILED, Ordering::Release);
@@ -167,7 +167,7 @@ impl AsyncSend {
                 }
             }
         }
-        
+
         // Store waker for notification
         self.waker = Some(cx.waker().clone());
         Poll::Pending
@@ -196,17 +196,17 @@ impl PortSet {
             count: AtomicUsize::new(0),
         })
     }
-    
+
     /// Add a port to the set
     pub fn add_port(&self, port: Arc<Port>) {
         let mut ports = self.ports.lock();
         ports.push_back(port);
         self.count.fetch_add(1, Ordering::Relaxed);
-        
+
         // Wake any waiting receivers
         self.wake_one();
     }
-    
+
     /// Remove a port from the set
     pub fn remove_port(&self, port_id: PortId) -> Option<Arc<Port>> {
         let mut ports = self.ports.lock();
@@ -218,32 +218,32 @@ impl PortSet {
             None
         }
     }
-    
+
     /// Receive from any port in the set
     pub fn receive(&self) -> Option<(PortId, Message)> {
         let ports = self.ports.lock();
-        
+
         // Try each port in round-robin fashion
         for port in ports.iter() {
             if let Some(msg) = port.receive() {
                 return Some((port.id(), msg));
             }
         }
-        
+
         None
     }
-    
+
     /// Async receive from any port
     pub fn async_receive(&self, waker: Waker) -> Poll<Option<(PortId, Message)>> {
         // Try immediate receive
         if let Some(result) = self.receive() {
             return Poll::Ready(Some(result));
         }
-        
+
         // Queue waker for notification
         let mut waiters = self.waiters.lock();
         waiters.push_back(waker);
-        
+
         // Try once more (race prevention)
         if let Some(result) = self.receive() {
             // Remove the waker we just added
@@ -253,7 +253,7 @@ impl PortSet {
             Poll::Pending
         }
     }
-    
+
     /// Wake one waiting receiver
     fn wake_one(&self) {
         let mut waiters = self.waiters.lock();
@@ -261,7 +261,7 @@ impl PortSet {
             waker.wake();
         }
     }
-    
+
     /// Wake all waiting receivers
     pub fn wake_all(&self) {
         let mut waiters = self.waiters.lock();
@@ -287,22 +287,22 @@ impl Channel {
             receive_port: Port::new(task),
         }
     }
-    
+
     /// Send a message through the channel
     pub fn send(&self, msg: Message) -> Result<(), Message> {
         self.send_port.send(msg)
     }
-    
+
     /// Receive a message from the channel
     pub fn receive(&self) -> Option<Message> {
         self.receive_port.receive()
     }
-    
+
     /// Create an async send operation
     pub fn async_send(&self, msg: Message) -> AsyncSend {
         AsyncSend::new(self.send_port.clone(), msg)
     }
-    
+
     /// Create an async receive operation
     pub fn async_receive(&self) -> AsyncReceive {
         AsyncReceive::new(self.receive_port.clone())
@@ -325,20 +325,20 @@ impl RpcClient {
             sequence: AtomicUsize::new(0),
         }
     }
-    
+
     /// Send an RPC request and wait for reply
     pub fn call(&self, request: Message) -> AsyncResult<Message> {
         // Add sequence number to request
         let _seq = self.sequence.fetch_add(1, Ordering::Relaxed);
-        
+
         // Send request
-        self.channel.send(request)
+        self.channel
+            .send(request)
             .map_err(|_| AsyncError::PortDead)?;
-        
+
         // Wait for reply with matching sequence
         // This is simplified - real implementation would match sequences
-        self.channel.receive()
-            .ok_or(AsyncError::WouldBlock)
+        self.channel.receive().ok_or(AsyncError::WouldBlock)
     }
 }
 
@@ -346,46 +346,46 @@ impl RpcClient {
 mod tests {
     use super::*;
     use crate::types::TaskId;
-    
+
     #[test]
     fn test_port_set_creation() {
         let set = PortSet::new();
         assert_eq!(set.count.load(Ordering::Relaxed), 0);
     }
-    
+
     #[test]
     fn test_port_set_operations() {
         let set = PortSet::new();
         let task = TaskId(1);
-        
+
         let port1 = Port::new(task);
         let port2 = Port::new(task);
-        
+
         set.add_port(port1.clone());
         set.add_port(port2.clone());
-        
+
         assert_eq!(set.count.load(Ordering::Relaxed), 2);
-        
+
         set.remove_port(port1.id());
         assert_eq!(set.count.load(Ordering::Relaxed), 1);
     }
-    
+
     #[test]
     fn test_channel_creation() {
         let task = TaskId(1);
         let channel = Channel::new(task);
-        
+
         // For a proper channel test, we'd need bidirectional communication
         // For now, just test that ports are created
         assert!(channel.send_port.is_active());
         assert!(channel.receive_port.is_active());
     }
-    
+
     #[test]
     fn test_rpc_client() {
         let task = TaskId(1);
         let client = RpcClient::new(task);
-        
+
         // Would need full async runtime to test properly
         assert_eq!(client.sequence.load(Ordering::Relaxed), 0);
     }

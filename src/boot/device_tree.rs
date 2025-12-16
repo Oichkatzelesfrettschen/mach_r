@@ -6,16 +6,16 @@ use heapless::Vec;
 /// Device Tree Header (DTB format)
 #[repr(C, packed)]
 pub struct DeviceTreeHeader {
-    pub magic: u32,           // 0xd00dfeed
-    pub totalsize: u32,       // Size of DTB in bytes
-    pub off_dt_struct: u32,   // Offset to structure block
-    pub off_dt_strings: u32,  // Offset to strings block
-    pub off_mem_rsvmap: u32,  // Offset to memory reservation block
-    pub version: u32,         // DTB version
+    pub magic: u32,             // 0xd00dfeed
+    pub totalsize: u32,         // Size of DTB in bytes
+    pub off_dt_struct: u32,     // Offset to structure block
+    pub off_dt_strings: u32,    // Offset to strings block
+    pub off_mem_rsvmap: u32,    // Offset to memory reservation block
+    pub version: u32,           // DTB version
     pub last_comp_version: u32, // Last compatible version
-    pub boot_cpuid_phys: u32, // Boot CPU ID
-    pub size_dt_strings: u32, // Size of strings block
-    pub size_dt_struct: u32,  // Size of structure block
+    pub boot_cpuid_phys: u32,   // Boot CPU ID
+    pub size_dt_strings: u32,   // Size of strings block
+    pub size_dt_struct: u32,    // Size of structure block
 }
 
 /// Device Tree magic number
@@ -39,80 +39,85 @@ pub struct DeviceTreeParser {
 
 impl DeviceTreeParser {
     /// Initialize device tree parser
+    ///
+    /// # Safety
+    ///
+    /// - `dtb_addr` must point to a valid Flattened Device Tree blob
+    /// - The DTB must remain valid for the lifetime of the parser
     pub unsafe fn new(dtb_addr: *const u8) -> Result<Self, &'static str> {
         if dtb_addr.is_null() {
             return Err("Null device tree address");
         }
-        
+
         let header = &*(dtb_addr as *const DeviceTreeHeader);
-        
+
         // Check magic number (with byte swapping if needed)
         let magic = u32::from_be(header.magic);
         if magic != DTB_MAGIC {
             return Err("Invalid device tree magic");
         }
-        
-        Ok(Self {
-            dtb_addr,
-            header,
-        })
+
+        Ok(Self { dtb_addr, header })
     }
-    
+
     /// Get device tree version
     pub fn version(&self) -> u32 {
         u32::from_be(self.header.version)
     }
-    
+
     /// Get total size of device tree
     pub fn size(&self) -> u32 {
         u32::from_be(self.header.totalsize)
     }
-    
+
     /// Get boot CPU ID
     pub fn boot_cpu_id(&self) -> u32 {
         u32::from_be(self.header.boot_cpuid_phys)
     }
-    
+
     /// Find a property in the device tree
     pub fn find_property(&self, _path: &str, _prop_name: &str) -> Option<DeviceTreeProperty> {
         // TODO: Implement device tree traversal
         // This would walk the structure block looking for nodes and properties
         None
     }
-    
+
     /// Get memory information from device tree
     pub fn get_memory_info(&self) -> Result<Vec<MemoryRange, 8>, &'static str> {
         // TODO: Parse /memory node to get memory ranges
         // Look for "reg" property in memory nodes
         use heapless::Vec;
         let mut ranges = Vec::new();
-        
+
         // For now, return a default range
-        ranges.push(MemoryRange {
-            start: 0x40000000, // 1GB start
-            size: 0x40000000,  // 1GB size
-        }).map_err(|_| "Failed to add memory range")?;
-        
+        ranges
+            .push(MemoryRange {
+                start: 0x40000000, // 1GB start
+                size: 0x40000000,  // 1GB size
+            })
+            .map_err(|_| "Failed to add memory range")?;
+
         Ok(ranges)
     }
-    
+
     /// Get CPU information from device tree
     pub fn get_cpu_info(&self) -> Result<Vec<CpuInfo, 16>, &'static str> {
         // TODO: Parse /cpus node to get CPU information
         use heapless::Vec;
         let mut cpus = Vec::new();
-        
+
         // For now, return a single CPU
         cpus.push(CpuInfo {
             cpu_id: 0,
             reg: 0,
             compatible: "arm,cortex-a53",
             enable_method: "psci",
-        }).map_err(|_| "Failed to add CPU info")?;
-        
+        })
+        .map_err(|_| "Failed to add CPU info")?;
+
         Ok(cpus)
     }
-    
+
     /// Get interrupt controller information
     pub fn get_interrupt_controller(&self) -> Option<InterruptControllerInfo> {
         // TODO: Find interrupt-controller nodes
@@ -123,17 +128,17 @@ impl DeviceTreeParser {
             compatible: "arm,gic-400",
         })
     }
-    
+
     /// Get timer information
     pub fn get_timer_info(&self) -> Option<TimerInfo> {
         // TODO: Find timer nodes
         Some(TimerInfo {
             compatible: "arm,armv8-timer",
             interrupts: [13, 14, 11, 10], // Secure/non-secure physical/virtual
-            clock_frequency: 24000000, // 24MHz
+            clock_frequency: 24000000,    // 24MHz
         })
     }
-    
+
     /// Get UART information for console
     pub fn get_uart_info(&self) -> Option<UartInfo> {
         // TODO: Find UART/serial nodes
@@ -145,26 +150,27 @@ impl DeviceTreeParser {
             clock_frequency: 24000000,
         })
     }
-    
+
     /// Validate device tree structure
     pub fn validate(&self) -> Result<(), &'static str> {
         let size = self.size() as usize;
-        
+
         // Basic size checks
         if size < core::mem::size_of::<DeviceTreeHeader>() {
             return Err("Device tree too small");
         }
-        
-        if size > 1024 * 1024 { // 1MB limit
+
+        if size > 1024 * 1024 {
+            // 1MB limit
             return Err("Device tree too large");
         }
-        
+
         // Check version
         let version = self.version();
         if version < 16 {
             return Err("Device tree version too old");
         }
-        
+
         Ok(())
     }
 }
@@ -223,12 +229,12 @@ impl DeviceTreeUtils {
         if data.len() < address_cells * 4 {
             return None;
         }
-        
+
         match address_cells {
             1 => {
                 let addr = u32::from_be_bytes([data[0], data[1], data[2], data[3]]);
                 Some(addr as u64)
-            },
+            }
             2 => {
                 if data.len() >= 8 {
                     let high = u32::from_be_bytes([data[0], data[1], data[2], data[3]]);
@@ -237,27 +243,33 @@ impl DeviceTreeUtils {
                 } else {
                     None
                 }
-            },
+            }
             _ => None,
         }
     }
-    
+
     /// Convert device tree size cells to u64
     pub fn parse_size(data: &[u8], size_cells: usize) -> Option<u64> {
         Self::parse_address(data, size_cells)
     }
-    
+
     /// Parse string from device tree strings block
-    pub fn parse_string(strings_base: *const u8, offset: u32) -> Option<&'static str> {
+    ///
+    /// # Safety
+    ///
+    /// - `strings_base` must point to a valid device tree strings block
+    /// - The string at `offset` must be null-terminated within 256 bytes
+    /// - The memory must remain valid for the `'static` lifetime
+    pub unsafe fn parse_string(strings_base: *const u8, offset: u32) -> Option<&'static str> {
         unsafe {
             let str_ptr = strings_base.add(offset as usize);
             let mut len = 0;
-            
+
             // Find string length (null-terminated)
             while len < 256 && *str_ptr.add(len) != 0 {
                 len += 1;
             }
-            
+
             if len > 0 {
                 let bytes = core::slice::from_raw_parts(str_ptr, len);
                 core::str::from_utf8(bytes).ok()
@@ -266,29 +278,29 @@ impl DeviceTreeUtils {
             }
         }
     }
-    
+
     /// Check if string matches compatible property
     pub fn is_compatible(compatible_data: &[u8], target: &str) -> bool {
         // Compatible properties can contain multiple null-separated strings
         let mut offset = 0;
-        
+
         while offset < compatible_data.len() {
             let start = offset;
-            
+
             // Find end of current string
             while offset < compatible_data.len() && compatible_data[offset] != 0 {
                 offset += 1;
             }
-            
+
             if let Ok(compat_str) = core::str::from_utf8(&compatible_data[start..offset]) {
                 if compat_str == target {
                     return true;
                 }
             }
-            
+
             offset += 1; // Skip null terminator
         }
-        
+
         false
     }
 }
@@ -309,7 +321,7 @@ pub mod constants {
     pub const ARM_CORTEX_A53: &str = "arm,cortex-a53";
     pub const ARM_CORTEX_A57: &str = "arm,cortex-a57";
     pub const ARM_CORTEX_A72: &str = "arm,cortex-a72";
-    
+
     /// Standard property names
     pub const PROP_COMPATIBLE: &str = "compatible";
     pub const PROP_REG: &str = "reg";
@@ -317,7 +329,7 @@ pub mod constants {
     pub const PROP_CLOCK_FREQUENCY: &str = "clock-frequency";
     pub const PROP_ENABLE_METHOD: &str = "enable-method";
     pub const PROP_DEVICE_TYPE: &str = "device_type";
-    
+
     /// Standard node names
     pub const NODE_MEMORY: &str = "memory";
     pub const NODE_CPUS: &str = "cpus";

@@ -5,14 +5,14 @@
 //! features like memory-mapped files, copy-on-write, and distributed
 //! shared memory.
 
+use crate::message::Message;
+use crate::paging::{PageTableFlags, PhysicalAddress, VirtualAddress, PAGE_SIZE};
+use crate::port::Port;
+use crate::types::TaskId;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use core::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use spin::Mutex;
-use crate::types::TaskId;
-use crate::port::Port;
-use crate::message::Message;
-use crate::paging::{VirtualAddress, PhysicalAddress, PageTableFlags, PAGE_SIZE};
 
 /// Memory object - represents a region of pageable memory
 pub struct MemoryObject {
@@ -63,47 +63,47 @@ impl Protection {
         write: false,
         execute: false,
     };
-    
+
     /// Read-only
     pub const READ: Self = Protection {
         read: true,
         write: false,
         execute: false,
     };
-    
+
     /// Read-write
     pub const READ_WRITE: Self = Protection {
         read: true,
         write: true,
         execute: false,
     };
-    
+
     /// Read-execute
     pub const READ_EXECUTE: Self = Protection {
         read: true,
         write: false,
         execute: true,
     };
-    
+
     /// All permissions
     pub const ALL: Self = Protection {
         read: true,
         write: true,
         execute: true,
     };
-    
+
     /// Convert to page table flags
     pub fn to_page_flags(&self) -> PageTableFlags {
         let mut flags = PageTableFlags::PRESENT;
-        
+
         if self.write {
             flags = flags.union(PageTableFlags::WRITABLE);
         }
-        
+
         if !self.execute {
             flags = flags.union(PageTableFlags::NO_EXECUTE);
         }
-        
+
         flags
     }
 }
@@ -123,7 +123,7 @@ impl MemoryObject {
             can_copy: true,
         })
     }
-    
+
     /// Create a memory object backed by an external pager
     pub fn with_pager(size: usize, protection: Protection, pager: Arc<Port>) -> Arc<Self> {
         Arc::new(MemoryObject {
@@ -138,7 +138,7 @@ impl MemoryObject {
             can_copy: true,
         })
     }
-    
+
     /// Create a shadow object for copy-on-write
     pub fn create_shadow(&self) -> Arc<Self> {
         Arc::new(MemoryObject {
@@ -153,12 +153,12 @@ impl MemoryObject {
             can_copy: false,
         })
     }
-    
+
     /// Increment reference count
     pub fn reference(&self) {
         self.refs.fetch_add(1, Ordering::Relaxed);
     }
-    
+
     /// Decrement reference count
     pub fn dereference(&self) -> usize {
         self.refs.fetch_sub(1, Ordering::Relaxed) - 1
@@ -192,26 +192,31 @@ impl ExternalPager {
     pub fn pager_port(&self) -> Arc<Port> {
         self.port.clone()
     }
-    
+
     /// Register a memory object with this pager
     pub fn register_object(&self, obj: Arc<MemoryObject>) {
         let mut objects = self.objects.lock();
         objects.push(obj);
     }
-    
+
     /// Handle a page fault for a memory object
-    pub fn handle_fault(&self, obj_id: MemoryObjectId, offset: usize) -> Result<PhysicalAddress, PagerError> {
+    pub fn handle_fault(
+        &self,
+        obj_id: MemoryObjectId,
+        offset: usize,
+    ) -> Result<PhysicalAddress, PagerError> {
         // Find the memory object
         let objects = self.objects.lock();
-        let obj = objects.iter()
+        let obj = objects
+            .iter()
             .find(|o| o.id == obj_id)
             .ok_or(PagerError::ObjectNotFound)?;
-        
+
         // Check bounds
         if offset >= obj.size {
             return Err(PagerError::InvalidOffset);
         }
-        
+
         // Send page request to external pager
         if let Some(ref pager_port) = obj.pager_port {
             let request = PageRequest {
@@ -220,22 +225,22 @@ impl ExternalPager {
                 size: PAGE_SIZE,
                 protection: obj.protection,
             };
-            
+
             // Create request message
             let msg = self.create_page_request_message(request)?;
             pager_port.send(msg).map_err(|_| PagerError::PagerDead)?;
-            
+
             // Wait for response (simplified - should be async)
             if let Some(reply) = pager_port.receive() {
                 // Parse reply and get physical page
                 return self.parse_page_reply(reply);
             }
         }
-        
+
         // No pager, allocate zero page
         Ok(self.allocate_zero_page())
     }
-    
+
     /// Create a page request message
     fn create_page_request_message(&self, request: PageRequest) -> Result<Message, PagerError> {
         // Serialize request into message
@@ -244,14 +249,14 @@ impl ExternalPager {
         Message::new_inline(self.port.id(), data.as_bytes())
             .map_err(|_| PagerError::MessageCreationFailed)
     }
-    
+
     /// Parse a page reply message
     fn parse_page_reply(&self, _msg: Message) -> Result<PhysicalAddress, PagerError> {
         // In real implementation, would extract physical address from message
         // For now, return a dummy address
         Ok(PhysicalAddress::new(0x10000))
     }
-    
+
     /// Allocate a zero-filled page
     fn allocate_zero_page(&self) -> PhysicalAddress {
         // In real implementation, would allocate from physical memory manager
@@ -341,19 +346,23 @@ impl VmMapEntry {
             copy_on_write: false,
         }
     }
-    
+
     /// Get the size of this entry
     pub fn size(&self) -> usize {
         self.end.0 - self.start.0
     }
-    
+
     /// Check if an address is within this entry
     pub fn contains(&self, addr: VirtualAddress) -> bool {
         addr.0 >= self.start.0 && addr.0 < self.end.0
     }
-    
+
     /// Handle a fault in this region
-    pub fn handle_fault(&self, addr: VirtualAddress, write: bool) -> Result<PhysicalAddress, PagerError> {
+    pub fn handle_fault(
+        &self,
+        addr: VirtualAddress,
+        write: bool,
+    ) -> Result<PhysicalAddress, PagerError> {
         // Check protection
         if write && !self.protection.write {
             if self.copy_on_write {
@@ -362,7 +371,7 @@ impl VmMapEntry {
             }
             return Err(PagerError::RequestDenied);
         }
-        
+
         // Calculate offset into memory object
         let region_offset = addr.0 - self.start.0;
         let _object_offset = self.offset + region_offset;
@@ -371,7 +380,7 @@ impl VmMapEntry {
         // In real implementation, would go through the pager
         Ok(PhysicalAddress::new(0x30000))
     }
-    
+
     /// Handle copy-on-write fault
     fn handle_cow_fault(&self, _addr: VirtualAddress) -> Result<PhysicalAddress, PagerError> {
         // In real implementation:
@@ -405,7 +414,7 @@ impl VmMap {
             next_address: Mutex::new(VirtualAddress::new(0x1000)),
         }
     }
-    
+
     /// Allocate a region in the address space
     pub fn allocate(
         &self,
@@ -415,44 +424,47 @@ impl VmMap {
     ) -> Result<VirtualAddress, PagerError> {
         let mut next = self.next_address.lock();
         let mut entries = self.entries.lock();
-        
+
         // Align size to page boundary
         let aligned_size = (size + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
-        
+
         // Find free space
         let start = *next;
         let end = VirtualAddress::new(start.0 + aligned_size);
-        
+
         // Check bounds
         if end.0 > self.max_address.0 {
             return Err(PagerError::InvalidOffset);
         }
-        
+
         // Create entry
         let entry = VmMapEntry::new(start, end, object, 0, protection);
         entries.push(entry);
-        
+
         // Update next address
         *next = end;
-        
+
         Ok(start)
     }
-    
+
     /// Find entry containing an address
     pub fn find_entry(&self, addr: VirtualAddress) -> Option<VmMapEntry> {
         let entries = self.entries.lock();
-        entries.iter()
-            .find(|e| e.contains(addr))
-            .cloned()
+        entries.iter().find(|e| e.contains(addr)).cloned()
     }
-    
+
     /// Handle a page fault
-    pub fn handle_fault(&self, addr: VirtualAddress, write: bool) -> Result<PhysicalAddress, PagerError> {
+    pub fn handle_fault(
+        &self,
+        addr: VirtualAddress,
+        write: bool,
+    ) -> Result<PhysicalAddress, PagerError> {
         let entries = self.entries.lock();
-        let entry = entries.iter()
+        let entry = entries
+            .iter()
             .find(|e| e.contains(addr))
             .ok_or(PagerError::ObjectNotFound)?;
-        
+
         entry.handle_fault(addr, write)
     }
 }
@@ -477,7 +489,7 @@ impl Clone for VmMapEntry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_memory_object_creation() {
         let obj = MemoryObject::new(4096, Protection::READ_WRITE);
@@ -485,7 +497,7 @@ mod tests {
         assert!(obj.protection.read);
         assert!(obj.protection.write);
     }
-    
+
     #[test]
     fn test_protection_flags() {
         let prot = Protection::READ_EXECUTE;
@@ -493,7 +505,7 @@ mod tests {
         assert!(flags.contains(PageTableFlags::PRESENT));
         assert!(flags.contains(PageTableFlags::NO_EXECUTE));
     }
-    
+
     #[test]
     fn test_vm_map_entry() {
         let obj = MemoryObject::new(8192, Protection::READ);
@@ -504,20 +516,20 @@ mod tests {
             0,
             Protection::READ,
         );
-        
+
         assert_eq!(entry.size(), 0x2000);
         assert!(entry.contains(VirtualAddress::new(0x1500)));
         assert!(!entry.contains(VirtualAddress::new(0x3000)));
     }
-    
+
     #[test]
     fn test_vm_map_allocation() {
         let map = VmMap::new();
         let obj = MemoryObject::new(4096, Protection::READ_WRITE);
-        
+
         let addr = map.allocate(4096, obj, Protection::READ_WRITE);
         assert!(addr.is_ok());
-        
+
         let start = addr.unwrap();
         assert_eq!(start.0, 0x1000);
     }

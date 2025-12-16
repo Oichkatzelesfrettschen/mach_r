@@ -1,7 +1,7 @@
 //! Virtual Machine integration module
 //! Integrates pure Rust VM implementations including EVM
 
-use heapless::{Vec, String};
+use heapless::{String, Vec};
 
 pub mod evm_engine;
 
@@ -69,29 +69,34 @@ impl VmManager {
             initialized: false,
         }
     }
-    
+
     /// Initialize the VM manager
     pub fn init(&mut self) -> Result<(), &'static str> {
         if self.initialized {
             return Ok(());
         }
-        
+
         // Initialize EVM engine
         evm_engine::init()?;
-        
+
         self.initialized = true;
         Ok(())
     }
-    
+
     /// Create a new VM instance
-    pub fn create_vm(&mut self, vm_type: VmType, memory_limit: usize, cpu_limit: u32) -> Result<u32, &'static str> {
+    pub fn create_vm(
+        &mut self,
+        vm_type: VmType,
+        memory_limit: usize,
+        cpu_limit: u32,
+    ) -> Result<u32, &'static str> {
         if !self.initialized {
             return Err("VM manager not initialized");
         }
-        
+
         let id = self.next_id;
         self.next_id += 1;
-        
+
         let context = VmContext {
             id,
             vm_type,
@@ -99,15 +104,20 @@ impl VmManager {
             cpu_limit,
             state: VmState::Created,
         };
-        
+
         self.vms.push(context).map_err(|_| "Too many VMs")?;
         Ok(id)
     }
-    
+
     /// Execute code in a VM
-    pub fn execute(&mut self, vm_id: u32, code: &[u8], data: &[u8]) -> Result<VmResult, &'static str> {
+    pub fn execute(
+        &mut self,
+        vm_id: u32,
+        code: &[u8],
+        data: &[u8],
+    ) -> Result<VmResult, &'static str> {
         let vm = self.find_vm_mut(vm_id)?;
-        
+
         match vm.vm_type {
             VmType::Ethereum => {
                 vm.state = VmState::Running;
@@ -117,36 +127,39 @@ impl VmManager {
             }
         }
     }
-    
+
     /// Find a VM by ID
     fn find_vm_mut(&mut self, id: u32) -> Result<&mut VmContext, &'static str> {
-        self.vms.iter_mut()
+        self.vms
+            .iter_mut()
             .find(|vm| vm.id == id)
             .ok_or("VM not found")
     }
-    
+
     /// Get VM list
     pub fn list_vms(&self) -> &Vec<VmContext, 16> {
         &self.vms
     }
-    
+
     /// Stop a VM
     pub fn stop_vm(&mut self, vm_id: u32) -> Result<(), &'static str> {
         let vm = self.find_vm_mut(vm_id)?;
         vm.state = VmState::Stopped;
         Ok(())
     }
-    
+
     /// Remove a stopped VM
     pub fn remove_vm(&mut self, vm_id: u32) -> Result<(), &'static str> {
-        let pos = self.vms.iter()
+        let pos = self
+            .vms
+            .iter()
             .position(|vm| vm.id == vm_id)
             .ok_or("VM not found")?;
-        
+
         if self.vms[pos].state != VmState::Stopped {
             return Err("VM must be stopped before removal");
         }
-        
+
         self.vms.swap_remove(pos);
         Ok(())
     }
@@ -158,11 +171,11 @@ static mut VM_MANAGER: Option<VmManager> = None;
 pub fn init() -> Result<(), &'static str> {
     let mut manager = VmManager::new();
     manager.init()?;
-    
+
     unsafe {
         VM_MANAGER = Some(manager);
     }
-    
+
     Ok(())
 }
 

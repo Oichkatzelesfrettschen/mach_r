@@ -36,29 +36,25 @@ global_asm!(
 global_asm!(
     ".section .multiboot",
     ".align 8",
-
     // Multiboot2 header start
     "multiboot2_header_start:",
-    "    .long 0xe85250d6",                    // Magic number
-    "    .long 0",                             // Architecture: i386 (32-bit protected mode)
-    "    .long multiboot2_header_end - multiboot2_header_start",  // Header length
+    "    .long 0xe85250d6", // Magic number
+    "    .long 0",          // Architecture: i386 (32-bit protected mode)
+    "    .long multiboot2_header_end - multiboot2_header_start", // Header length
     "    .long -(0xe85250d6 + 0 + (multiboot2_header_end - multiboot2_header_start))", // Checksum
-
     // Framebuffer tag (optional)
     "framebuffer_tag_start:",
-    "    .short 5",                            // Type: framebuffer
-    "    .short 1",                            // Flags: optional
-    "    .long framebuffer_tag_end - framebuffer_tag_start",  // Size
-    "    .long 1024",                          // Width
-    "    .long 768",                           // Height
-    "    .long 32",                            // Depth (bits per pixel)
+    "    .short 5",                                          // Type: framebuffer
+    "    .short 1",                                          // Flags: optional
+    "    .long framebuffer_tag_end - framebuffer_tag_start", // Size
+    "    .long 1024",                                        // Width
+    "    .long 768",                                         // Height
+    "    .long 32",                                          // Depth (bits per pixel)
     "framebuffer_tag_end:",
-
     // End tag (required)
-    "    .short 0",                            // Type: end
-    "    .short 0",                            // Flags
-    "    .long 8",                             // Size
-
+    "    .short 0", // Type: end
+    "    .short 0", // Flags
+    "    .long 8",  // Size
     "multiboot2_header_end:",
 );
 
@@ -66,17 +62,14 @@ global_asm!(
 global_asm!(
     ".section .bss",
     ".align 4096",
-
     // P4 (PML4) - Page Map Level 4
     ".global p4_table",
     "p4_table:",
     "    .skip 4096",
-
     // P3 (PDPT) - Page Directory Pointer Table
     ".global p3_table",
     "p3_table:",
     "    .skip 4096",
-
     // P2 (PD) - Page Directory
     ".global p2_table",
     "p2_table:",
@@ -281,16 +274,14 @@ global_asm!(
 global_asm!(
     ".section .rodata",
     ".align 16",
-
     "gdt64:",
-    "    .quad 0",                              // Null descriptor
-    "    .quad 0x00AF9A000000FFFF",            // Code segment (64-bit, executable, readable)
-    "    .quad 0x00AF92000000FFFF",            // Data segment (64-bit, writable)
+    "    .quad 0",                  // Null descriptor
+    "    .quad 0x00AF9A000000FFFF", // Code segment (64-bit, executable, readable)
+    "    .quad 0x00AF92000000FFFF", // Data segment (64-bit, writable)
     "gdt64_end:",
-
     "gdt64_pointer:",
-    "    .short gdt64_end - gdt64 - 1",        // GDT limit
-    "    .long gdt64",                          // GDT base (32-bit address for lgdt in 32-bit mode)
+    "    .short gdt64_end - gdt64 - 1", // GDT limit
+    "    .long gdt64",                  // GDT base (32-bit address for lgdt in 32-bit mode)
 );
 
 /// Rust kernel entry point
@@ -304,7 +295,7 @@ pub extern "C" fn kmain(_magic: u64, _multiboot_info: u64) -> ! {
     // Clear screen
     let vga_buffer = 0xB8000 as *mut u8;
     unsafe {
-        for i in 0..80*25*2 {
+        for i in 0..80 * 25 * 2 {
             *vga_buffer.offset(i) = 0;
         }
     }

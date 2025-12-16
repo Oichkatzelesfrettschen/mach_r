@@ -1,8 +1,8 @@
 //! Ethereum Virtual Machine engine integration
 //! Pure Rust EVM implementation for smart contract execution
 
-use heapless::{Vec, String};
 use super::VmResult;
+use heapless::{String, Vec};
 
 /// EVM configuration for Mach_R
 #[derive(Debug)]
@@ -48,12 +48,12 @@ impl Account {
             storage: Vec::new(),
         }
     }
-    
+
     /// Set account balance
     pub fn set_balance(&mut self, balance: [u8; 32]) {
         self.balance = balance;
     }
-    
+
     /// Set contract code
     pub fn set_code(&mut self, code: &[u8]) -> Result<(), &'static str> {
         self.code.clear();
@@ -62,21 +62,24 @@ impl Account {
         }
         Ok(())
     }
-    
+
     /// Get storage value
     pub fn get_storage(&self, key: [u8; 32]) -> [u8; 32] {
-        self.storage.iter()
+        self.storage
+            .iter()
             .find(|(k, _)| *k == key)
             .map(|(_, v)| *v)
             .unwrap_or([0; 32])
     }
-    
+
     /// Set storage value
     pub fn set_storage(&mut self, key: [u8; 32], value: [u8; 32]) -> Result<(), &'static str> {
         if let Some(entry) = self.storage.iter_mut().find(|(k, _)| *k == key) {
             entry.1 = value;
         } else {
-            self.storage.push((key, value)).map_err(|_| "Storage full")?;
+            self.storage
+                .push((key, value))
+                .map_err(|_| "Storage full")?;
         }
         Ok(())
     }
@@ -104,26 +107,29 @@ impl SimpleEvmBackend {
             chain_id: 1,
         }
     }
-    
+
     /// Get account (create if doesn't exist)
     pub fn get_account_mut(&mut self, address: [u8; 20]) -> Result<&mut Account, &'static str> {
         if let Some(pos) = self.accounts.iter().position(|(addr, _)| *addr == address) {
             Ok(&mut self.accounts[pos].1)
         } else {
             let account = Account::new();
-            self.accounts.push((address, account)).map_err(|_| "Too many accounts")?;
+            self.accounts
+                .push((address, account))
+                .map_err(|_| "Too many accounts")?;
             let len = self.accounts.len();
             Ok(&mut self.accounts[len - 1].1)
         }
     }
-    
+
     /// Get account (read-only)
     pub fn get_account(&self, address: [u8; 20]) -> Option<&Account> {
-        self.accounts.iter()
+        self.accounts
+            .iter()
             .find(|(addr, _)| *addr == address)
             .map(|(_, acc)| acc)
     }
-    
+
     /// Check if account exists
     pub fn account_exists(&self, address: [u8; 20]) -> bool {
         self.accounts.iter().any(|(addr, _)| *addr == address)
@@ -146,23 +152,27 @@ impl EvmEngine {
             initialized: false,
         }
     }
-    
+
     /// Initialize the EVM engine
     pub fn init(&mut self) -> Result<(), &'static str> {
         if self.initialized {
             return Ok(());
         }
-        
+
         self.initialized = true;
         Ok(())
     }
-    
+
     /// Execute EVM bytecode (simplified implementation)
-    pub fn execute_bytecode(&mut self, code: &[u8], _data: &[u8]) -> Result<VmResult, &'static str> {
+    pub fn execute_bytecode(
+        &mut self,
+        code: &[u8],
+        _data: &[u8],
+    ) -> Result<VmResult, &'static str> {
         if !self.initialized {
             return Err("EVM engine not initialized");
         }
-        
+
         // This is a highly simplified EVM implementation
         // In a real implementation, this would:
         // 1. Parse and execute EVM bytecode
@@ -170,11 +180,11 @@ impl EvmEngine {
         // 3. Handle stack operations
         // 4. Manage memory and storage
         // 5. Handle contract calls and creates
-        
+
         let gas_used = core::cmp::min(1000, self.config.gas_limit); // Simulate gas usage
-        
+
         let mut output = Vec::new();
-        
+
         // Simple bytecode analysis
         if code.is_empty() {
             return Ok(VmResult {
@@ -188,14 +198,14 @@ impl EvmEngine {
                 }),
             });
         }
-        
+
         // For demonstration, just copy first few bytes as output
         for &byte in code.iter().take(32) {
             if output.push(byte).is_err() {
                 break;
             }
         }
-        
+
         Ok(VmResult {
             exit_code: 0,
             gas_used,
@@ -203,23 +213,28 @@ impl EvmEngine {
             error: None,
         })
     }
-    
+
     /// Create a contract account
     pub fn create_contract(&mut self, address: [u8; 20], code: &[u8]) -> Result<(), &'static str> {
         let account = self.backend.get_account_mut(address)?;
         account.set_code(code)?;
         Ok(())
     }
-    
+
     /// Get contract code
     pub fn get_contract_code(&self, address: [u8; 20]) -> Vec<u8, 1024> {
-        self.backend.get_account(address)
+        self.backend
+            .get_account(address)
             .map(|acc| acc.code.clone())
-            .unwrap_or_else(Vec::new)
+            .unwrap_or_default()
     }
-    
+
     /// Set account balance
-    pub fn set_balance(&mut self, address: [u8; 20], balance: [u8; 32]) -> Result<(), &'static str> {
+    pub fn set_balance(
+        &mut self,
+        address: [u8; 20],
+        balance: [u8; 32],
+    ) -> Result<(), &'static str> {
         let account = self.backend.get_account_mut(address)?;
         account.set_balance(balance);
         Ok(())
@@ -233,11 +248,11 @@ pub fn init() -> Result<(), &'static str> {
     let config = EvmConfig::default();
     let mut engine = EvmEngine::new(config);
     engine.init()?;
-    
+
     unsafe {
         EVM_ENGINE = Some(engine);
     }
-    
+
     Ok(())
 }
 

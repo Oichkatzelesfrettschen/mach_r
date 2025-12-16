@@ -3,8 +3,8 @@
 //! These tests validate that real Apple/OSF .defs files parse and
 //! generate correct Rust code.
 
-use mig_rust::*;
 use mig_rust::codegen::rust_stubs::RustStubGenerator;
+use mig_rust::*;
 
 #[test]
 fn test_port_defs_parsing() {
@@ -138,32 +138,34 @@ fn test_exc_defs_rust_generation() {
 #[test]
 fn test_all_apple_defs_compile() {
     // Test all Apple .defs files can be parsed and generate code
-    let test_files = vec![
-        ("port.defs", "port_test"),
-        ("exc.defs", "exc"),
-    ];
+    let test_files = vec![("port.defs", "port_test"), ("exc.defs", "exc")];
 
     for (file, expected_name) in test_files {
         let input = std::fs::read_to_string(format!("tests/{}", file))
             .expect(&format!("Failed to read {}", file));
 
         let mut lexer = SimpleLexer::new(input);
-        let tokens = lexer.tokenize()
+        let tokens = lexer
+            .tokenize()
             .expect(&format!("{}: tokenize failed", file));
 
         let mut parser = Parser::new(tokens);
-        let subsystem = parser.parse()
-            .expect(&format!("{}: parse failed", file));
+        let subsystem = parser.parse().expect(&format!("{}: parse failed", file));
 
-        assert_eq!(subsystem.name, expected_name,
-            "{}: wrong subsystem name", file);
+        assert_eq!(
+            subsystem.name, expected_name,
+            "{}: wrong subsystem name",
+            file
+        );
 
         let mut analyzer = SemanticAnalyzer::new();
-        let analyzed = analyzer.analyze(&subsystem)
+        let analyzed = analyzer
+            .analyze(&subsystem)
             .expect(&format!("{}: analysis failed", file));
 
         let generator = RustStubGenerator::new();
-        let _rust_code = generator.generate(&analyzed)
+        let _rust_code = generator
+            .generate(&analyzed)
             .expect(&format!("{}: codegen failed", file));
     }
 }
@@ -192,8 +194,11 @@ fn test_preprocessor_conditional_handling() {
     for routine in &analyzed.routines {
         for field in &routine.request_layout.fields {
             if field.c_type.contains("mach_port") {
-                assert!(field.c_type == "mach_port_t",
-                    "Expected mach_port_t, got {}", field.c_type);
+                assert!(
+                    field.c_type == "mach_port_t",
+                    "Expected mach_port_t, got {}",
+                    field.c_type
+                );
             }
         }
     }

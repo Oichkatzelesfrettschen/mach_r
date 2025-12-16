@@ -1,5 +1,4 @@
 /// MIG type system - IPC types and type checking
-
 use std::collections::HashMap;
 
 /// Type system for MIG

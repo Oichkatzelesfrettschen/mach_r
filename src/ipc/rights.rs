@@ -1,6 +1,6 @@
 //! Port rights management (capabilities)
 
-use super::{PortName, IpcError, IpcResult};
+use super::{IpcError, IpcResult, PortName};
 use alloc::vec::Vec;
 
 /// Types of port rights (like mach_port_right_t)
@@ -23,7 +23,7 @@ pub enum PortRightType {
 pub struct PortRight {
     pub port: PortName,
     pub right_type: PortRightType,
-    pub refs: u32,  // Reference count for send rights
+    pub refs: u32, // Reference count for send rights
 }
 
 impl PortRight {
@@ -35,16 +35,16 @@ impl PortRight {
             refs: 1,
         }
     }
-    
+
     /// Create a new receive right
     pub fn new_receive(port: PortName) -> Self {
         Self {
             port,
             right_type: PortRightType::Receive,
-            refs: 1,  // Receive rights always have exactly 1 ref
+            refs: 1, // Receive rights always have exactly 1 ref
         }
     }
-    
+
     /// Create a send-once right
     pub fn new_send_once(port: PortName) -> Self {
         Self {
@@ -53,7 +53,7 @@ impl PortRight {
             refs: 1,
         }
     }
-    
+
     /// Add a reference
     pub fn add_ref(&mut self) -> IpcResult<()> {
         match self.right_type {
@@ -65,10 +65,10 @@ impl PortRight {
                 // Can't add refs to receive right
                 Err(IpcError::InvalidRight)
             }
-            _ => Ok(())
+            _ => Ok(()),
         }
     }
-    
+
     /// Remove a reference
     pub fn remove_ref(&mut self) -> IpcResult<bool> {
         if self.refs > 0 {
@@ -93,7 +93,7 @@ impl PortSet {
             members: Vec::new(),
         }
     }
-    
+
     pub fn add_member(&mut self, port: PortName) -> IpcResult<()> {
         if self.members.contains(&port) {
             return Err(IpcError::InvalidPort);
@@ -101,7 +101,7 @@ impl PortSet {
         self.members.push(port);
         Ok(())
     }
-    
+
     pub fn remove_member(&mut self, port: PortName) -> IpcResult<()> {
         if let Some(pos) = self.members.iter().position(|&p| p == port) {
             self.members.swap_remove(pos);
@@ -117,7 +117,7 @@ impl PortSet {
 pub enum Disposition {
     /// Move the right (sender loses it)
     MoveSend,
-    /// Copy the right 
+    /// Copy the right
     CopySend,
     /// Make a send right from receive right
     MakeSend,

@@ -33,40 +33,44 @@ pub use riscv64::*;
 pub trait Architecture {
     /// Initialize the architecture
     fn init();
-    
+
     /// Enable interrupts
     fn enable_interrupts();
-    
+
     /// Disable interrupts
     fn disable_interrupts();
-    
+
     /// Check if interrupts are enabled
     fn interrupts_enabled() -> bool;
-    
+
     /// Halt the processor
     fn halt() -> !;
-    
+
     /// Flush TLB for a specific address
     fn flush_tlb(addr: usize);
-    
+
     /// Read from an I/O port (x86-specific, no-op on others)
     fn inb(port: u16) -> u8;
-    
+
     /// Write to an I/O port (x86-specific, no-op on others)
     fn outb(port: u16, value: u8);
-    
+
     /// Get current CPU ID
     fn cpu_id() -> usize;
-    
+
     /// Read keyboard scancode
     fn keyboard_read() -> u8;
-    
+
     /// Get current timestamp in microseconds
     fn current_timestamp() -> u64;
 }
 
 /// Page size for current architecture
-#[cfg(any(target_arch = "aarch64", target_arch = "x86_64", target_arch = "riscv64"))]
+#[cfg(any(
+    target_arch = "aarch64",
+    target_arch = "x86_64",
+    target_arch = "riscv64"
+))]
 pub const PAGE_SIZE: usize = 4096;
 
 #[cfg(target_arch = "mips64")]
@@ -127,12 +131,12 @@ pub enum MemoryKind {
 /// CPU features detection
 pub struct CpuFeatures {
     pub has_fpu: bool,
-    pub has_vmx: bool,      // Intel VT-x
-    pub has_svm: bool,      // AMD-V
-    pub has_sve: bool,      // ARM SVE
-    pub has_neon: bool,     // ARM NEON
-    pub has_msa: bool,      // MIPS MSA
-    pub has_vector: bool,   // RISC-V V extension
+    pub has_vmx: bool,    // Intel VT-x
+    pub has_svm: bool,    // AMD-V
+    pub has_sve: bool,    // ARM SVE
+    pub has_neon: bool,   // ARM NEON
+    pub has_msa: bool,    // MIPS MSA
+    pub has_vector: bool, // RISC-V V extension
     pub cache_line_size: usize,
     pub physical_address_bits: u8,
     pub virtual_address_bits: u8,
@@ -144,23 +148,28 @@ pub fn cpu_features() -> CpuFeatures {
     {
         aarch64::detect_features()
     }
-    
+
     #[cfg(target_arch = "x86_64")]
     {
         x86_64::detect_features()
     }
-    
+
     #[cfg(target_arch = "mips64")]
     {
         mips64::detect_features()
     }
-    
+
     #[cfg(target_arch = "riscv64")]
     {
         riscv64::detect_features()
     }
-    
-    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64", target_arch = "mips64", target_arch = "riscv64")))]
+
+    #[cfg(not(any(
+        target_arch = "aarch64",
+        target_arch = "x86_64",
+        target_arch = "mips64",
+        target_arch = "riscv64"
+    )))]
     {
         CpuFeatures {
             has_fpu: false,
@@ -183,23 +192,28 @@ pub fn keyboard_read() -> u8 {
     {
         aarch64::ArchImpl::keyboard_read()
     }
-    
+
     #[cfg(target_arch = "x86_64")]
     {
         x86_64::ArchImpl::keyboard_read()
     }
-    
+
     #[cfg(target_arch = "mips64")]
     {
         mips64::ArchImpl::keyboard_read()
     }
-    
+
     #[cfg(target_arch = "riscv64")]
     {
         riscv64::ArchImpl::keyboard_read()
     }
-    
-    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64", target_arch = "mips64", target_arch = "riscv64")))]
+
+    #[cfg(not(any(
+        target_arch = "aarch64",
+        target_arch = "x86_64",
+        target_arch = "mips64",
+        target_arch = "riscv64"
+    )))]
     {
         0x1c // Return Enter key scancode as default
     }
@@ -211,48 +225,60 @@ pub fn current_timestamp() -> u64 {
     {
         aarch64::ArchImpl::current_timestamp()
     }
-    
+
     #[cfg(target_arch = "x86_64")]
     {
         x86_64::ArchImpl::current_timestamp()
     }
-    
+
     #[cfg(target_arch = "mips64")]
     {
         mips64::ArchImpl::current_timestamp()
     }
-    
+
     #[cfg(target_arch = "riscv64")]
     {
         riscv64::ArchImpl::current_timestamp()
     }
-    
-    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64", target_arch = "mips64", target_arch = "riscv64")))]
+
+    #[cfg(not(any(
+        target_arch = "aarch64",
+        target_arch = "x86_64",
+        target_arch = "mips64",
+        target_arch = "riscv64"
+    )))]
     {
         0 // Default timestamp
     }
 }
 
 /// Wait for interrupt (architecture-specific)
+#[cfg(not(test))]
 pub fn wait_for_interrupt() {
     #[cfg(target_arch = "aarch64")]
     {
         unsafe { core::arch::asm!("wfi") };
     }
-    
+
     #[cfg(target_arch = "x86_64")]
     {
         unsafe { core::arch::asm!("hlt") };
     }
-    
+
     #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     {
-        // Default: spin loop for unsupported architectures
-        loop { core::hint::spin_loop(); }
+        core::hint::spin_loop();
     }
 }
 
+/// Wait for interrupt (test mode - no privileged instructions)
+#[cfg(test)]
+pub fn wait_for_interrupt() {
+    core::hint::spin_loop();
+}
+
 /// Halt the processor (architecture-specific)
+#[cfg(not(test))]
 pub fn halt() -> ! {
     #[cfg(target_arch = "aarch64")]
     {
@@ -260,7 +286,7 @@ pub fn halt() -> ! {
             unsafe { core::arch::asm!("wfi") };
         }
     }
-    
+
     #[cfg(target_arch = "x86_64")]
     {
         loop {
@@ -269,10 +295,19 @@ pub fn halt() -> ! {
             }
         }
     }
-    
+
     #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     {
-        // Default: spin loop for unsupported architectures
-        loop { core::hint::spin_loop(); }
+        loop {
+            core::hint::spin_loop();
+        }
+    }
+}
+
+/// Halt the processor (test mode - no privileged instructions)
+#[cfg(test)]
+pub fn halt() -> ! {
+    loop {
+        core::hint::spin_loop();
     }
 }

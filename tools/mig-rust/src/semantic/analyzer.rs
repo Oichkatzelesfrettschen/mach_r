@@ -1,9 +1,9 @@
 //! Semantic analyzer for MIG subsystems
 
-use crate::parser::ast::{Subsystem, Statement, Routine};
+use super::layout::{MessageLayout, MessageLayoutCalculator};
 use super::types::TypeResolver;
-use super::layout::{MessageLayoutCalculator, MessageLayout};
 use super::SemanticError;
+use crate::parser::ast::{Routine, Statement, Subsystem};
 
 /// Analyzed subsystem with semantic information
 #[derive(Debug, Clone)]

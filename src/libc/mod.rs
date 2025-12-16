@@ -5,10 +5,10 @@
 
 pub mod errno;
 pub mod stdio;
-pub mod unistd;
 pub mod stdlib;
 pub mod string;
 pub mod sys;
+pub mod unistd;
 
 use crate::trap::TrapError;
 
@@ -34,7 +34,9 @@ fn trap_result_to_c(result: Result<usize, TrapError>) -> isize {
     match result {
         Ok(value) => value as isize,
         Err(error) => {
-            unsafe { ERRNO = error.to_errno(); }
+            unsafe {
+                ERRNO = error.to_errno();
+            }
             -1
         }
     }

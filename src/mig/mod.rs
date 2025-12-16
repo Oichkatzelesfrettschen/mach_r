@@ -2,13 +2,13 @@
 //!
 //! Generates client/server stubs for Mach IPC interfaces
 
-use alloc::string::String;
-use alloc::vec::Vec;
-use alloc::boxed::Box;
-use crate::message::{Message, MessageBody};
 use crate::mach::abi as mach_abi;
+use crate::message::{Message, MessageBody};
 use crate::port::Port;
 use crate::types::PortId;
+use alloc::boxed::Box;
+use alloc::string::String;
+use alloc::vec::Vec;
 
 /// MIG interface definition
 pub struct Interface {
@@ -81,10 +81,10 @@ pub enum Direction {
 pub trait MigClient {
     /// Get the server port
     fn server_port(&self) -> &Port;
-    
+
     /// Send a message and wait for reply
     fn call(&self, msg: Message) -> Result<Message, MigError>;
-    
+
     /// Send a message without waiting for reply
     fn send(&self, msg: Message) -> Result<(), MigError>;
 }
@@ -114,16 +114,16 @@ pub mod generated;
 #[cfg(test)]
 mod gen_tests {
     use super::generated::name_server::*;
-    use crate::types::PortId;
     use crate::port::Port;
-    use alloc::sync::Arc;
+    use crate::types::PortId;
     use crate::types::TaskId;
+    use alloc::sync::Arc;
 
     #[test]
     fn generated_constants_exist() {
-        assert_eq!(NS_REGISTER_ID, 1000);
-        assert_eq!(NS_LOOKUP_ID, 1001);
-        assert_eq!(NS_UNREGISTER_ID, 1002);
+        assert_eq!(REGISTER_ID, 1000);
+        assert_eq!(LOOKUP_ID, 1001);
+        assert_eq!(UNREGISTER_ID, 1002);
     }
 
     #[test]
@@ -214,7 +214,10 @@ mod tests {
                 sequence: 0,
                 id: 0,
             },
-            body: crate::message::MessageBody::PortRight { port: PortId(42), right_type: crate::message::PortRightType::SendOnce }
+            body: crate::message::MessageBody::PortRight {
+                port: PortId(42),
+                right_type: crate::message::PortRightType::SendOnce,
+            },
         };
         let d = marshal::port_right_to_descriptor(&m).expect("descriptor");
         assert_eq!(d.name, PortId(42));
@@ -225,17 +228,33 @@ mod tests {
     #[test]
     fn ool_and_oolports_marshalling() {
         // OOL bytes
-        let m = crate::message::Message::new_out_of_line(PortId(1), alloc::vec![1,2,3,4]);
+        let m = crate::message::Message::new_out_of_line(PortId(1), alloc::vec![1, 2, 3, 4]);
         let d = marshal::ool_to_descriptor(&m).expect("ool");
         assert_eq!(d.data_len, 4);
         assert_eq!(d.descriptor_type, mach_abi::MachMsgDescriptorType::Ool);
 
         // OOL ports
-        let body = crate::message::MessageBody::PortArray { ports: alloc::vec![PortId(7), PortId(8)], right_type: crate::message::PortRightType::Send };
-        let m2 = crate::message::Message { header: crate::message::MessageHeader{ size:0, msg_type: crate::message::MessageType::Normal, remote_port: Some(PortId(2)), local_port: None, sequence:0, id: 0 }, body };
+        let body = crate::message::MessageBody::PortArray {
+            ports: alloc::vec![PortId(7), PortId(8)],
+            right_type: crate::message::PortRightType::Send,
+        };
+        let m2 = crate::message::Message {
+            header: crate::message::MessageHeader {
+                size: 0,
+                msg_type: crate::message::MessageType::Normal,
+                remote_port: Some(PortId(2)),
+                local_port: None,
+                sequence: 0,
+                id: 0,
+            },
+            body,
+        };
         let d2 = marshal::port_array_to_descriptor(&m2).expect("oolports");
         assert_eq!(d2.names.len(), 2);
-        assert_eq!(d2.descriptor_type, mach_abi::MachMsgDescriptorType::OolPorts);
+        assert_eq!(
+            d2.descriptor_type,
+            mach_abi::MachMsgDescriptorType::OolPorts
+        );
         assert_eq!(d2.disposition as u32, 17);
     }
 }
@@ -244,16 +263,16 @@ mod tests {
 pub mod vm_interface {
     use super::*;
     use crate::types::TaskId;
-    
+
     /// VM subsystem ID
     pub const VM_SUBSYSTEM: u32 = 2400;
-    
+
     /// Message IDs
     pub const VM_ALLOCATE_ID: u32 = VM_SUBSYSTEM + 1;
     pub const VM_DEALLOCATE_ID: u32 = VM_SUBSYSTEM + 2;
     pub const VM_PROTECT_ID: u32 = VM_SUBSYSTEM + 3;
     pub const VM_MAP_ID: u32 = VM_SUBSYSTEM + 4;
-    
+
     /// VM allocate request
     #[repr(C)]
     pub struct VmAllocateRequest {
@@ -263,7 +282,7 @@ pub mod vm_interface {
         pub size: u64,
         pub anywhere: bool,
     }
-    
+
     /// VM allocate reply
     #[repr(C)]
     pub struct VmAllocateReply {
@@ -271,7 +290,7 @@ pub mod vm_interface {
         pub return_code: i32,
         pub address: u64,
     }
-    
+
     /// Message header (like mach_msg_header_t)
     #[repr(C)]
     pub struct MessageHeader {
@@ -281,18 +300,18 @@ pub mod vm_interface {
         pub local_port: PortId,
         pub id: u32,
     }
-    
+
     /// VM client implementation
     pub struct VmClient {
         server_port: Port,
     }
-    
+
     impl VmClient {
         /// Create a new VM client
         pub fn new(server_port: Port) -> Self {
             VmClient { server_port }
         }
-        
+
         /// Allocate virtual memory
         pub fn vm_allocate(
             &self,
@@ -315,45 +334,44 @@ pub mod vm_interface {
                 size,
                 anywhere,
             };
-            
+
             // Marshal request
             let msg = marshal_vm_allocate_request(&request)?;
-            
+
             // Send and wait for reply
             let reply_msg = self.call(msg)?;
-            
+
             // Unmarshal reply
             let reply = unmarshal_vm_allocate_reply(&reply_msg)?;
-            
+
             if reply.return_code != 0 {
                 return Err(MigError::ServerNotFound);
             }
-            
+
             Ok(reply.address)
         }
     }
-    
+
     impl MigClient for VmClient {
         fn server_port(&self) -> &Port {
             &self.server_port
         }
-        
+
         fn call(&self, msg: Message) -> Result<Message, MigError> {
             // Send message
-            self.server_port.send(msg)
+            self.server_port
+                .send(msg)
                 .map_err(|_| MigError::PortError)?;
-            
+
             // Wait for reply
-            self.server_port.receive()
-                .ok_or(MigError::PortError)
+            self.server_port.receive().ok_or(MigError::PortError)
         }
-        
+
         fn send(&self, msg: Message) -> Result<(), MigError> {
-            self.server_port.send(msg)
-                .map_err(|_| MigError::PortError)
+            self.server_port.send(msg).map_err(|_| MigError::PortError)
         }
     }
-    
+
     /// Marshal VM allocate request
     fn marshal_vm_allocate_request(req: &VmAllocateRequest) -> Result<Message, MigError> {
         // In real implementation, would properly serialize
@@ -363,11 +381,10 @@ pub mod vm_interface {
                 core::mem::size_of::<VmAllocateRequest>(),
             )
         };
-        
-        Message::new_inline(req.header.remote_port, data)
-            .map_err(|_| MigError::MarshalError)
+
+        Message::new_inline(req.header.remote_port, data).map_err(|_| MigError::MarshalError)
     }
-    
+
     /// Unmarshal VM allocate reply
     fn unmarshal_vm_allocate_reply(_msg: &Message) -> Result<VmAllocateReply, MigError> {
         // In real implementation, would properly deserialize
@@ -399,15 +416,15 @@ macro_rules! mig_interface {
         )*
     ) => {
         pub mod $name {
-            
-            
+
+
             pub const SUBSYSTEM_ID: u32 = $id;
-            
+
             $(
                 #[allow(non_upper_case_globals)]
                 pub const $routine_name: u32 = $msg_id;
             )*
-            
+
             // Generate client and server stubs...
         }
     };
@@ -415,17 +432,17 @@ macro_rules! mig_interface {
 
 mig_interface! {
     subsystem file_server = 3000;
-    
+
     routine file_open(3001) {
         inputs: { path: String, flags: u32 }
         outputs: { handle: Port, error: i32 }
     }
-    
+
     routine file_read(3002) {
         inputs: { handle: Port, offset: u64, length: u32 }
         outputs: { data: VarArray, error: i32 }
     }
-    
+
     routine file_write(3003) {
         inputs: { handle: Port, offset: u64, data: VarArray }
         outputs: { bytes_written: u32, error: i32 }

@@ -3,8 +3,8 @@
 //! This test generates Rust code and verifies its structure without requiring
 //! the mach_r runtime to be available.
 
-use mig_rust::*;
 use mig_rust::codegen::rust_stubs::RustStubGenerator;
+use mig_rust::*;
 use std::fs;
 use tempfile::TempDir;
 
@@ -23,9 +23,7 @@ fn test_generated_code_structure() {
     let analyzed = analyzer.analyze(&subsystem).expect("analysis failed");
 
     // Generate Rust code
-    let generator = RustStubGenerator::new()
-        .with_async()
-        .with_server_traits();
+    let generator = RustStubGenerator::new().with_async().with_server_traits();
     let rust_code = generator.generate(&analyzed).expect("codegen failed");
 
     // Verify structure
@@ -127,9 +125,7 @@ fn test_file_generation() {
     let mut analyzer = SemanticAnalyzer::new();
     let analyzed = analyzer.analyze(&subsystem).expect("analysis failed");
 
-    let generator = RustStubGenerator::new()
-        .with_async()
-        .with_server_traits();
+    let generator = RustStubGenerator::new().with_async().with_server_traits();
     let rust_code = generator.generate(&analyzed).expect("codegen failed");
 
     // Write to temporary file
@@ -158,9 +154,7 @@ fn test_imports_complete() {
     let mut analyzer = SemanticAnalyzer::new();
     let analyzed = analyzer.analyze(&subsystem).expect("analysis failed");
 
-    let generator = RustStubGenerator::new()
-        .with_async()
-        .with_server_traits();
+    let generator = RustStubGenerator::new().with_async().with_server_traits();
     let rust_code = generator.generate(&analyzed).expect("codegen failed");
 
     // Verify all required imports are present
@@ -203,18 +197,28 @@ fn test_async_stub_implementation() {
     assert!(rust_code.contains("tokio::task::spawn_blocking"));
 
     // Verify async stubs don't have unimplemented!()
-    let async_stub_start = rust_code.find("pub async fn add_async(").expect("async stub not found");
-    let next_fn = rust_code[async_stub_start..].find("\n    pub ").unwrap_or(rust_code.len());
+    let async_stub_start = rust_code
+        .find("pub async fn add_async(")
+        .expect("async stub not found");
+    let next_fn = rust_code[async_stub_start..]
+        .find("\n    pub ")
+        .unwrap_or(rust_code.len());
     let async_stub_code = &rust_code[async_stub_start..async_stub_start + next_fn];
 
-    assert!(!async_stub_code.contains("unimplemented!"),
-        "Async stub should not contain unimplemented!()");
+    assert!(
+        !async_stub_code.contains("unimplemented!"),
+        "Async stub should not contain unimplemented!()"
+    );
 
     // Verify it calls the sync version
-    assert!(async_stub_code.contains("add(port"),
-        "Async stub should call sync version");
+    assert!(
+        async_stub_code.contains("add(port"),
+        "Async stub should call sync version"
+    );
 
     // Verify proper error handling
-    assert!(async_stub_code.contains("map_err"),
-        "Async stub should handle join errors");
+    assert!(
+        async_stub_code.contains("map_err"),
+        "Async stub should handle join errors"
+    );
 }

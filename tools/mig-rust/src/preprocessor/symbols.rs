@@ -55,7 +55,10 @@ impl SymbolTable {
 
     /// Get the value of a symbol
     pub fn get(&self, name: &str) -> SymbolValue {
-        self.symbols.get(name).copied().unwrap_or(SymbolValue::Undefined)
+        self.symbols
+            .get(name)
+            .copied()
+            .unwrap_or(SymbolValue::Undefined)
     }
 
     /// Check if a symbol is defined

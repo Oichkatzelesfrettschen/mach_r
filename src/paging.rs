@@ -5,10 +5,10 @@
 //! - Page table creation and management
 //! - Memory protection and access control
 
+use crate::println;
+use alloc::boxed::Box;
 use core::ops::{Index, IndexMut};
 use spin::Mutex;
-use alloc::boxed::Box;
-use crate::println;
 
 /// Page size (4KB)
 pub const PAGE_SIZE: usize = 4096;
@@ -23,41 +23,41 @@ pub struct VirtualAddress(pub usize);
 impl VirtualAddress {
     /// Create a new virtual address
     pub fn new(addr: usize) -> Self {
-        // Canonical address check for x86_64
-        assert!(addr < 0x0000_8000_0000_0000 || addr >= 0xFFFF_8000_0000_0000);
+        // Canonical address check for x86_64 (non-canonical addresses are in the range)
+        assert!(!(0x0000_8000_0000_0000..0xFFFF_8000_0000_0000).contains(&addr));
         VirtualAddress(addr)
     }
-    
+
     /// Get the page offset (bits 0-11)
     pub fn page_offset(&self) -> usize {
         self.0 & 0xFFF
     }
-    
+
     /// Get the P1 index (bits 12-20)
     pub fn p1_index(&self) -> usize {
         (self.0 >> 12) & 0x1FF
     }
-    
+
     /// Get the P2 index (bits 21-29)
     pub fn p2_index(&self) -> usize {
         (self.0 >> 21) & 0x1FF
     }
-    
+
     /// Get the P3 index (bits 30-38)
     pub fn p3_index(&self) -> usize {
         (self.0 >> 30) & 0x1FF
     }
-    
+
     /// Get the P4 index (bits 39-47)
     pub fn p4_index(&self) -> usize {
         (self.0 >> 39) & 0x1FF
     }
-    
+
     /// Align down to page boundary
     pub fn align_down(&self) -> Self {
         VirtualAddress(self.0 & !0xFFF)
     }
-    
+
     /// Align up to page boundary
     pub fn align_up(&self) -> Self {
         VirtualAddress((self.0 + PAGE_SIZE - 1) & !(PAGE_SIZE - 1))
@@ -101,17 +101,17 @@ impl PageTableFlags {
     pub const GLOBAL: Self = PageTableFlags(1 << 8);
     /// Disable execution
     pub const NO_EXECUTE: Self = PageTableFlags(1 << 63);
-    
+
     /// Create empty flags
     pub const fn empty() -> Self {
         PageTableFlags(0)
     }
-    
+
     /// Combine flags
     pub const fn union(&self, other: Self) -> Self {
         PageTableFlags(self.0 | other.0)
     }
-    
+
     /// Check if flags contain a specific flag
     pub fn contains(&self, other: Self) -> bool {
         (self.0 & other.0) == other.0
@@ -120,7 +120,7 @@ impl PageTableFlags {
 
 impl core::ops::BitOr for PageTableFlags {
     type Output = Self;
-    
+
     fn bitor(self, other: Self) -> Self::Output {
         PageTableFlags(self.0 | other.0)
     }
@@ -142,28 +142,28 @@ impl PageTableEntry {
     pub const fn unused() -> Self {
         PageTableEntry(0)
     }
-    
+
     /// Check if entry is unused
     pub fn is_unused(&self) -> bool {
         self.0 == 0
     }
-    
+
     /// Get the flags
     pub fn flags(&self) -> PageTableFlags {
         PageTableFlags(self.0 & 0xFFF | (self.0 & (1 << 63)))
     }
-    
+
     /// Get the physical address
     pub fn addr(&self) -> PhysicalAddress {
         PhysicalAddress((self.0 & 0x000F_FFFF_FFFF_F000) as usize)
     }
-    
+
     /// Set the entry
     pub fn set_entry(&mut self, addr: PhysicalAddress, flags: PageTableFlags) {
-        assert!(addr.0 % PAGE_SIZE == 0);
+        assert!(addr.0.is_multiple_of(PAGE_SIZE));
         self.0 = (addr.0 as u64) | flags.0;
     }
-    
+
     /// Set as unused
     pub fn set_unused(&mut self) {
         self.0 = 0;
@@ -183,14 +183,14 @@ impl PageTable {
             entries: [PageTableEntry::unused(); ENTRIES_PER_TABLE],
         }
     }
-    
+
     /// Clear all entries
     pub fn clear(&mut self) {
         for entry in &mut self.entries {
             entry.set_unused();
         }
     }
-    
+
     /// Get the next level page table
     pub fn next_table(&self, index: usize) -> Option<&PageTable> {
         let entry = &self.entries[index];
@@ -201,7 +201,7 @@ impl PageTable {
             Some(unsafe { &*(entry.addr().0 as *const PageTable) })
         }
     }
-    
+
     /// Get the next level page table mutably
     pub fn next_table_mut(&mut self, index: usize) -> Option<&mut PageTable> {
         let entry = &self.entries[index];
@@ -212,7 +212,7 @@ impl PageTable {
             Some(unsafe { &mut *(entry.addr().0 as *mut PageTable) })
         }
     }
-    
+
     /// Create next level table if it doesn't exist
     pub fn next_table_create(&mut self, index: usize) -> &mut PageTable {
         if self.next_table(index).is_none() {
@@ -230,7 +230,7 @@ impl PageTable {
 
 impl Index<usize> for PageTable {
     type Output = PageTableEntry;
-    
+
     fn index(&self, index: usize) -> &Self::Output {
         &self.entries[index]
     }
@@ -255,38 +255,42 @@ impl ActivePageTable {
             p4: Mutex::new(unsafe { &mut *p4_ptr }),
         }
     }
-    
+
     /// Get the current active page table
+    ///
+    /// # Safety
+    ///
+    /// - Must be called in kernel mode with valid page tables active
+    /// - The returned reference is valid only while page tables remain active
     pub unsafe fn current() -> Self {
-        let p4_addr: usize;
         // In real implementation, read CR3 register
         // asm!("mov {}, cr3", out(reg) p4_addr);
-        p4_addr = 0; // Placeholder
-        
+        let p4_addr: usize = 0; // Placeholder
+
         ActivePageTable {
             p4: Mutex::new(&mut *(p4_addr as *mut PageTable)),
         }
     }
-    
+
     /// Map a virtual address to a physical address
     pub fn map(&mut self, virt: VirtualAddress, phys: PhysicalAddress, flags: PageTableFlags) {
         let mut p4 = self.p4.lock();
-        
+
         let p3 = p4.next_table_create(virt.p4_index());
         let p2 = p3.next_table_create(virt.p3_index());
         let p1 = p2.next_table_create(virt.p2_index());
-        
+
         p1[virt.p1_index()].set_entry(phys, flags.union(PageTableFlags::PRESENT));
-        
+
         // Flush TLB
         // In real implementation:
         // unsafe { asm!("invlpg [{}]", in(reg) virt.0); }
     }
-    
+
     /// Unmap a virtual address
     pub fn unmap(&mut self, virt: VirtualAddress) {
         let mut p4 = self.p4.lock();
-        
+
         if let Some(p3) = p4.next_table_mut(virt.p4_index()) {
             if let Some(p2) = p3.next_table_mut(virt.p3_index()) {
                 if let Some(p1) = p2.next_table_mut(virt.p2_index()) {
@@ -299,15 +303,15 @@ impl ActivePageTable {
             }
         }
     }
-    
+
     /// Translate a virtual address to physical
     pub fn translate(&self, virt: VirtualAddress) -> Option<PhysicalAddress> {
         let p4 = self.p4.lock();
-        
+
         let p3 = p4.next_table(virt.p4_index())?;
         let p2 = p3.next_table(virt.p3_index())?;
         let p1 = p2.next_table(virt.p2_index())?;
-        
+
         let entry = &p1[virt.p1_index()];
         if entry.is_unused() {
             None
@@ -326,22 +330,22 @@ impl PageFaultErrorCode {
     pub fn protection_violation(&self) -> bool {
         self.0 & 1 != 0
     }
-    
+
     /// Caused by write (vs read)
     pub fn write(&self) -> bool {
         self.0 & 2 != 0
     }
-    
+
     /// From user mode (vs kernel)
     pub fn user(&self) -> bool {
         self.0 & 4 != 0
     }
-    
+
     /// Reserved bit violation
     pub fn reserved_write(&self) -> bool {
         self.0 & 8 != 0
     }
-    
+
     /// Instruction fetch
     pub fn instruction_fetch(&self) -> bool {
         self.0 & 16 != 0
@@ -351,10 +355,13 @@ impl PageFaultErrorCode {
 /// Handle page fault
 pub fn handle_page_fault(addr: VirtualAddress, error_code: PageFaultErrorCode) {
     println!("Page fault at {:?}", addr);
-    println!("  Protection violation: {}", error_code.protection_violation());
+    println!(
+        "  Protection violation: {}",
+        error_code.protection_violation()
+    );
     println!("  Write access: {}", error_code.write());
     println!("  User mode: {}", error_code.user());
-    
+
     // In real implementation:
     // 1. Check if address is in valid region
     // 2. Allocate page if needed
@@ -375,7 +382,7 @@ pub fn init() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_virtual_address() {
         let addr = VirtualAddress::new(0x1234_5678_9ABC);
@@ -385,30 +392,30 @@ mod tests {
         assert_eq!(addr.p3_index(), 0x159);
         assert_eq!(addr.p4_index(), 0x024);
     }
-    
+
     #[test]
     fn test_page_table_entry() {
         let mut entry = PageTableEntry::unused();
         assert!(entry.is_unused());
-        
+
         let addr = PhysicalAddress::new(0x1000);
         let flags = PageTableFlags::PRESENT.union(PageTableFlags::WRITABLE);
         entry.set_entry(addr, flags);
-        
+
         assert!(!entry.is_unused());
         assert_eq!(entry.addr().0, 0x1000);
         assert!(entry.flags().contains(PageTableFlags::PRESENT));
     }
-    
+
     #[test]
     fn test_page_table() {
         let mut table = PageTable::new();
         assert!(table[0].is_unused());
-        
+
         let addr = PhysicalAddress::new(0x2000);
         let flags = PageTableFlags::PRESENT;
         table[0].set_entry(addr, flags);
-        
+
         assert!(!table[0].is_unused());
         assert_eq!(table[0].addr().0, 0x2000);
     }

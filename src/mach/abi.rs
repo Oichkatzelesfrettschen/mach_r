@@ -17,9 +17,13 @@ pub const fn mach_msgh_bits(remote: u32, local: u32) -> u32 {
     (remote & 0xff) | ((local & 0xff) << 8)
 }
 #[inline]
-pub const fn mach_msgh_bits_remote(bits: u32) -> u32 { bits & MACH_MSGH_BITS_REMOTE_MASK }
+pub const fn mach_msgh_bits_remote(bits: u32) -> u32 {
+    bits & MACH_MSGH_BITS_REMOTE_MASK
+}
 #[inline]
-pub const fn mach_msgh_bits_local(bits: u32) -> u32 { (bits & MACH_MSGH_BITS_LOCAL_MASK) >> 8 }
+pub const fn mach_msgh_bits_local(bits: u32) -> u32 {
+    (bits & MACH_MSGH_BITS_LOCAL_MASK) >> 8
+}
 
 // Port right disposition (subset)
 #[repr(u32)]

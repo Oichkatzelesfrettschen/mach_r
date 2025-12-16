@@ -1,8 +1,8 @@
 //! Synchronization primitives
 
-use core::sync::atomic::{AtomicBool, Ordering};
 use core::cell::UnsafeCell;
 use core::ops::{Deref, DerefMut};
+use core::sync::atomic::{AtomicBool, Ordering};
 
 /// A simple spinlock
 pub struct SpinLock<T> {
@@ -20,32 +20,30 @@ impl<T> SpinLock<T> {
             data: UnsafeCell::new(data),
         }
     }
-    
-    pub fn lock(&self) -> SpinLockGuard<T> {
+
+    pub fn lock(&self) -> SpinLockGuard<'_, T> {
         // Spin until we acquire the lock
-        while self.locked.compare_exchange_weak(
-            false,
-            true,
-            Ordering::Acquire,
-            Ordering::Relaxed
-        ).is_err() {
+        while self
+            .locked
+            .compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Relaxed)
+            .is_err()
+        {
             // Spin hint for ARM64
             #[cfg(target_arch = "aarch64")]
             unsafe {
                 core::arch::asm!("yield");
             }
         }
-        
+
         SpinLockGuard { lock: self }
     }
-    
-    pub fn try_lock(&self) -> Option<SpinLockGuard<T>> {
-        if self.locked.compare_exchange(
-            false,
-            true,
-            Ordering::Acquire,
-            Ordering::Relaxed
-        ).is_ok() {
+
+    pub fn try_lock(&self) -> Option<SpinLockGuard<'_, T>> {
+        if self
+            .locked
+            .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
+            .is_ok()
+        {
             Some(SpinLockGuard { lock: self })
         } else {
             None
@@ -66,7 +64,7 @@ impl<'a, T> Drop for SpinLockGuard<'a, T> {
 
 impl<'a, T> Deref for SpinLockGuard<'a, T> {
     type Target = T;
-    
+
     fn deref(&self) -> &T {
         unsafe { &*self.lock.data.get() }
     }

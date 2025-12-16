@@ -3,9 +3,9 @@
 //! Implements the Mach system call interface including port operations,
 //! task/thread management, and memory operations.
 
-use crate::types::{PortId, TaskId};
-use crate::message::Message;
 use crate::init::ServiceState;
+use crate::message::Message;
+use crate::types::{PortId, TaskId};
 
 /// System call numbers (Mach-style)
 #[repr(u64)]
@@ -16,12 +16,12 @@ pub enum SyscallNumber {
     PortDeallocate = 2,
     PortInsertRight = 3,
     PortExtractRight = 4,
-    
+
     // Message operations
     MsgSend = 10,
     MsgReceive = 11,
     MsgRpc = 12,
-    
+
     // Task operations
     TaskCreate = 20,
     TaskTerminate = 21,
@@ -29,7 +29,7 @@ pub enum SyscallNumber {
     TaskResume = 23,
     TaskGetSpecialPort = 24,
     TaskSetSpecialPort = 25,
-    
+
     // Thread operations
     ThreadCreate = 30,
     ThreadTerminate = 31,
@@ -37,7 +37,7 @@ pub enum SyscallNumber {
     ThreadSetState = 33,
     ThreadSuspend = 34,
     ThreadResume = 35,
-    
+
     // VM operations
     VmAllocate = 40,
     VmDeallocate = 41,
@@ -47,20 +47,20 @@ pub enum SyscallNumber {
     VmWrite = 45,
     VmCopy = 46,
     VmMap = 47,
-    
+
     // Host operations
     HostInfo = 50,
     HostKernelVersion = 51,
-    
+
     // Clock operations
     ClockGetTime = 60,
     ClockSleep = 61,
-    
+
     // Misc
     ThreadSwitch = 70,
     TaskSelf = 71,
     ThreadSelf = 72,
-    
+
     // Enhanced system calls for Mach_R components
     // Device driver operations
     DeviceOpen = 100,
@@ -69,7 +69,7 @@ pub enum SyscallNumber {
     DeviceWrite = 103,
     DeviceControl = 104,
     DeviceList = 105,
-    
+
     // Service management operations
     ServiceStart = 110,
     ServiceStop = 111,
@@ -78,19 +78,19 @@ pub enum SyscallNumber {
     ServiceList = 114,
     ServiceCreate = 115,
     ServiceDestroy = 116,
-    
+
     // Boot/System operations
     SystemInfo = 120,
     SystemReboot = 121,
     SystemShutdown = 122,
     SystemUptime = 123,
-    
+
     // Timer operations
     TimerCreate = 130,
     TimerDestroy = 131,
     TimerSetTimeout = 132,
     TimerGetTime = 133,
-    
+
     // Console/Debug operations
     ConsoleWrite = 140,
     ConsoleRead = 141,
@@ -180,7 +180,7 @@ pub fn dispatch(syscall_num: u64, args: &[u64]) -> i64 {
         142 => SyscallNumber::DebugPrint,
         _ => return SyscallResult::NotSupported as i64,
     };
-    
+
     // Dispatch to handler
     match syscall {
         SyscallNumber::PortAllocate => sys_port_allocate(args),
@@ -221,31 +221,31 @@ fn sys_port_allocate(args: &[u64]) -> i64 {
     if args.len() < 2 {
         return SyscallResult::InvalidArgument as i64;
     }
-    
+
     let task_id = TaskId(args[0]);
     let right_type = args[1];
-    
+
     // Get task
     let task_manager = crate::task::manager();
     let task = match task_manager.get_task(task_id) {
         Some(t) => t,
         None => return SyscallResult::InvalidTask as i64,
     };
-    
+
     // Allocate port
     let port_name = task.allocate_port();
-    
+
     // Add appropriate rights
     let add_right_result = match right_type {
         1 => crate::ipc::port::add_send_right(port_name), // Call the global add_send_right
-        2 => Ok(()), // Receive right is implicit
+        2 => Ok(()),                                      // Receive right is implicit
         _ => return SyscallResult::InvalidArgument as i64,
     };
 
-    if let Err(_) = add_right_result {
+    if add_right_result.is_err() {
         return SyscallResult::InvalidPort as i64; // Or appropriate error
     }
-    
+
     // Return port ID (in real implementation, would return port name)
     port_name.id() as i64
 }
@@ -255,14 +255,14 @@ fn sys_port_deallocate(args: &[u64]) -> i64 {
     if args.is_empty() {
         return SyscallResult::InvalidArgument as i64;
     }
-    
+
     let _port_id = PortId(args[0]);
-    
+
     // In real implementation:
     // 1. Verify caller has rights
     // 2. Remove from task's port namespace
     // 3. Deallocate if no more references
-    
+
     SyscallResult::Success as i64
 }
 
@@ -271,21 +271,21 @@ fn sys_msg_send(args: &[u64]) -> i64 {
     if args.len() < 3 {
         return SyscallResult::InvalidArgument as i64;
     }
-    
+
     let port_id = PortId(args[0]);
     let msg_addr = args[1] as *const u8;
     let msg_size = args[2] as usize;
-    
+
     // In real implementation:
     // 1. Copy message from user space
     // 2. Validate message format
     // 3. Check send rights
     // 4. Queue message
-    
+
     unsafe {
         // This is unsafe and simplified
         let msg_data = core::slice::from_raw_parts(msg_addr, msg_size.min(256));
-        
+
         match Message::new_inline(port_id, msg_data) {
             Ok(_msg) => {
                 // Would need to look up actual port
@@ -302,7 +302,7 @@ fn sys_msg_receive(args: &[u64]) -> i64 {
     if args.len() < 3 {
         return SyscallResult::InvalidArgument as i64;
     }
-    
+
     let _port_id = PortId(args[0]);
     let _msg_addr = args[1] as *mut u8;
     let _msg_size = args[2] as usize;
@@ -323,11 +323,11 @@ fn sys_task_create(args: &[u64]) -> i64 {
         // Use kernel task as parent
         TaskId(0)
     };
-    
+
     // Create new task
     let task_manager = crate::task::manager();
     let new_task = task_manager.create_task(alloc::string::String::from("user_task")); // Placeholder name
-    
+
     // Return task ID
     new_task.id().0 as i64
 }
@@ -337,9 +337,9 @@ fn sys_task_terminate(args: &[u64]) -> i64 {
     if args.is_empty() {
         return SyscallResult::InvalidArgument as i64;
     }
-    
+
     let task_id = TaskId(args[0]);
-    
+
     // Get task
     let task_manager = crate::task::manager();
     match task_manager.get_task(task_id) {
@@ -356,14 +356,15 @@ fn sys_thread_create(args: &[u64]) -> i64 {
     if args.is_empty() {
         return SyscallResult::InvalidArgument as i64;
     }
-    
+
     let task_id = TaskId(args[0]);
-    
+
     // Get task
     let task_manager = crate::task::manager();
     match task_manager.get_task(task_id) {
         Some(task) => {
-            let thread_id = task.create_thread(0, 0x1000, alloc::string::String::from("user_thread")); // Placeholder args
+            let thread_id =
+                task.create_thread(0, 0x1000, alloc::string::String::from("user_thread")); // Placeholder args
             thread_id.0 as i64
         }
         None => SyscallResult::InvalidTask as i64,
@@ -375,17 +376,17 @@ fn sys_vm_allocate(args: &[u64]) -> i64 {
     if args.len() < 3 {
         return SyscallResult::InvalidArgument as i64;
     }
-    
+
     let _task_id = TaskId(args[0]);
     let _address = args[1] as usize;
     let _size = args[2] as usize;
-    
+
     // In real implementation:
     // 1. Get task's VM map
     // 2. Find free region if address is 0
     // 3. Allocate pages
     // 4. Update page tables
-    
+
     // For now, return the requested address
     _address as i64
 }
@@ -414,18 +415,22 @@ pub fn user_to_kernel_msg(_user_msg: *const u8, _size: usize) -> Result<Message,
     // 2. Copy from user space safely
     // 3. Parse message format
     // 4. Validate port rights
-    
+
     Err(SyscallResult::NotSupported)
 }
 
 /// Copy kernel message to user space
-pub fn kernel_to_user_msg(_msg: &Message, _user_msg: *mut u8, _size: usize) -> Result<(), SyscallResult> {
+pub fn kernel_to_user_msg(
+    _msg: &Message,
+    _user_msg: *mut u8,
+    _size: usize,
+) -> Result<(), SyscallResult> {
     // In real implementation:
     // 1. Validate user pointer
     // 2. Check size is sufficient
     // 3. Copy to user space safely
     // 4. Transfer port rights
-    
+
     Err(SyscallResult::NotSupported)
 }
 
@@ -436,7 +441,7 @@ fn sys_device_open(args: &[u64]) -> i64 {
     if args.len() < 2 {
         return SyscallResult::InvalidArgument as i64;
     }
-    
+
     let _device_name_ptr = args[0] as *const u8;
     let _device_name_len = args[1] as usize;
 
@@ -447,10 +452,10 @@ fn sys_device_open(args: &[u64]) -> i64 {
 
 /// Close a device handle
 fn sys_device_close(args: &[u64]) -> i64 {
-    if args.len() < 1 {
+    if args.is_empty() {
         return SyscallResult::InvalidArgument as i64;
     }
-    
+
     let _device_handle = args[0];
 
     // TODO: Close actual device handle
@@ -490,7 +495,7 @@ fn sys_device_control(args: &[u64]) -> i64 {
     if args.len() < 3 {
         return SyscallResult::InvalidArgument as i64;
     }
-    
+
     let _device_handle = args[0];
     let _command = args[1] as u32;
     let _arg = args[2];
@@ -534,7 +539,7 @@ fn sys_service_stop(args: &[u64]) -> i64 {
 
     let _service_name_ptr = args[0] as *const u8;
     let _service_name_len = args[1] as usize;
-    
+
     // TODO: Stop actual service via init system
     SyscallResult::Success as i64
 }
@@ -544,7 +549,7 @@ fn sys_service_restart(args: &[u64]) -> i64 {
     if args.len() < 2 {
         return SyscallResult::InvalidArgument as i64;
     }
-    
+
     let _service_name_ptr = args[0] as *const u8;
     let _service_name_len = args[1] as usize;
 
@@ -586,7 +591,7 @@ fn sys_system_info(args: &[u64]) -> i64 {
 
     let _buffer_ptr = args[0] as *mut u8;
     let _buffer_size = args[1] as usize;
-    
+
     // TODO: Fill buffer with system info (kernel version, memory, etc.)
     SyscallResult::Success as i64
 }
@@ -599,7 +604,7 @@ fn sys_system_uptime(_args: &[u64]) -> i64 {
 
 /// Create a timer
 fn sys_timer_create(args: &[u64]) -> i64 {
-    if args.len() < 1 {
+    if args.is_empty() {
         return SyscallResult::InvalidArgument as i64;
     }
 
@@ -612,7 +617,7 @@ fn sys_timer_create(args: &[u64]) -> i64 {
 /// Get current time
 fn sys_timer_get_time(_args: &[u64]) -> i64 {
     // TODO: Get actual time from timer driver
-    if let Some(_) = crate::drivers::device_manager() {
+    if crate::drivers::device_manager().is_some() {
         // Mock timestamp in microseconds
         123456789
     } else {
@@ -625,10 +630,10 @@ fn sys_console_write(args: &[u64]) -> i64 {
     if args.len() < 2 {
         return SyscallResult::InvalidArgument as i64;
     }
-    
+
     let buffer_ptr = args[0] as *const u8;
     let buffer_size = args[1] as usize;
-    
+
     // TODO: Validate buffer and write to console via UART driver
     // For now, try to write via debug output
     unsafe {
@@ -637,7 +642,7 @@ fn sys_console_write(args: &[u64]) -> i64 {
             crate::boot::serial_println(s);
         }
     }
-    
+
     buffer_size as i64
 }
 
@@ -659,35 +664,35 @@ fn sys_debug_print(args: &[u64]) -> i64 {
     if args.len() < 2 {
         return SyscallResult::InvalidArgument as i64;
     }
-    
+
     let buffer_ptr = args[0] as *const u8;
     let buffer_size = args[1] as usize;
-    
+
     unsafe {
         let slice = core::slice::from_raw_parts(buffer_ptr, buffer_size);
         if let Ok(s) = core::str::from_utf8(slice) {
             crate::boot::serial_println(s);
         }
     }
-    
+
     buffer_size as i64
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_syscall_dispatch() {
         // Test invalid syscall
         let result = dispatch(999, &[]);
         assert_eq!(result, SyscallResult::NotSupported as i64);
-        
+
         // Test task_self
         let result = dispatch(71, &[]);
         assert_eq!(result, 0); // Kernel task
     }
-    
+
     #[test]
     fn test_port_allocate() {
         // Would need proper task setup

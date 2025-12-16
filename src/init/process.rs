@@ -1,7 +1,7 @@
 //! Process management primitives
 //! Low-level process creation and management
 
-use heapless::{String, Vec, FnvIndexMap};
+use heapless::{FnvIndexMap, String, Vec};
 
 /// Process creation parameters
 #[derive(Debug, Clone)]
@@ -31,7 +31,7 @@ impl ProcessSpawnParams {
     pub fn new(command: &str) -> Result<Self, &'static str> {
         let mut cmd = String::new();
         cmd.push_str(command).map_err(|_| "Command too long")?;
-        
+
         Ok(Self {
             command: cmd,
             args: Vec::new(),
@@ -44,7 +44,7 @@ impl ProcessSpawnParams {
             stderr: StdioRedirection::Null,
         })
     }
-    
+
     /// Add command line argument
     pub fn add_arg(&mut self, arg: &str) -> Result<(), &'static str> {
         let mut argument = String::new();
@@ -52,27 +52,34 @@ impl ProcessSpawnParams {
         self.args.push(argument).map_err(|_| "Too many arguments")?;
         Ok(())
     }
-    
+
     /// Set environment variable
     pub fn set_env(&mut self, key: &str, value: &str) -> Result<(), &'static str> {
         let mut env_key = String::new();
-        env_key.push_str(key).map_err(|_| "Environment key too long")?;
-        
+        env_key
+            .push_str(key)
+            .map_err(|_| "Environment key too long")?;
+
         let mut env_value = String::new();
-        env_value.push_str(value).map_err(|_| "Environment value too long")?;
-        
-        self.environment.insert(env_key, env_value)
+        env_value
+            .push_str(value)
+            .map_err(|_| "Environment value too long")?;
+
+        self.environment
+            .insert(env_key, env_value)
             .map_err(|_| "Too many environment variables")?;
         Ok(())
     }
-    
+
     /// Set working directory
     pub fn set_working_dir(&mut self, path: &str) -> Result<(), &'static str> {
         self.working_dir.clear();
-        self.working_dir.push_str(path).map_err(|_| "Working directory path too long")?;
+        self.working_dir
+            .push_str(path)
+            .map_err(|_| "Working directory path too long")?;
         Ok(())
     }
-    
+
     /// Set user and group IDs
     pub fn set_credentials(&mut self, uid: u32, gid: u32) {
         self.uid = Some(uid);
@@ -134,7 +141,7 @@ impl ProcessSpawner {
             next_pid: 1000, // Start PIDs from 1000
         }
     }
-    
+
     /// Spawn a new process
     pub fn spawn(&mut self, params: &ProcessSpawnParams) -> Result<ProcessHandle, &'static str> {
         // TODO: Implement actual process creation
@@ -144,10 +151,10 @@ impl ProcessSpawner {
         // 3. Load executable from filesystem
         // 4. Set up process environment
         // 5. Start execution
-        
+
         let pid = self.next_pid;
         self.next_pid += 1;
-        
+
         // For now, simulate process creation
         Ok(ProcessHandle {
             pid,
@@ -157,7 +164,7 @@ impl ProcessSpawner {
             start_time: get_current_time(),
         })
     }
-    
+
     /// Wait for a process to exit
     pub fn wait(&self, handle: &mut ProcessHandle) -> Result<i32, &'static str> {
         match handle.state {
@@ -173,7 +180,7 @@ impl ProcessSpawner {
             ProcessState::Unknown => Err("Process state unknown"),
         }
     }
-    
+
     /// Send signal to process
     pub fn kill(&self, handle: &mut ProcessHandle, signal: Signal) -> Result<(), &'static str> {
         match handle.state {
@@ -200,12 +207,12 @@ impl ProcessSpawner {
             _ => Err("Process not running"),
         }
     }
-    
+
     /// Check if process is still running
     pub fn is_running(&self, handle: &ProcessHandle) -> bool {
         matches!(handle.state, ProcessState::Running)
     }
-    
+
     /// Get process status
     pub fn get_status(&self, handle: &ProcessHandle) -> ProcessStatus {
         ProcessStatus {
@@ -213,7 +220,7 @@ impl ProcessSpawner {
             state: handle.state,
             command: handle.command.clone(),
             start_time: handle.start_time,
-            cpu_time: 0, // TODO: Track actual CPU time
+            cpu_time: 0,     // TODO: Track actual CPU time
             memory_usage: 0, // TODO: Track actual memory usage
         }
     }
@@ -250,39 +257,41 @@ impl CommandParser {
     /// Parse a command line into command and arguments
     pub fn parse(command_line: &str) -> Result<(String<256>, Vec<String<128>, 16>), &'static str> {
         let mut parts = command_line.split_whitespace();
-        
+
         let command = parts.next().ok_or("Empty command line")?;
         let mut cmd = String::new();
         cmd.push_str(command).map_err(|_| "Command too long")?;
-        
+
         let mut args = Vec::new();
         for arg in parts {
             let mut argument = String::new();
             argument.push_str(arg).map_err(|_| "Argument too long")?;
             args.push(argument).map_err(|_| "Too many arguments")?;
         }
-        
+
         Ok((cmd, args))
     }
-    
+
     /// Parse command line with environment variable expansion
     pub fn parse_with_env(
         command_line: &str,
-        _env: &FnvIndexMap<String<32>, String<128>, 32>
+        _env: &FnvIndexMap<String<32>, String<128>, 32>,
     ) -> Result<(String<256>, Vec<String<128>, 16>), &'static str> {
         // TODO: Implement environment variable expansion
         // For now, just parse normally
         Self::parse(command_line)
     }
-    
+
     /// Escape special characters in command arguments
     pub fn escape_arg(arg: &str) -> Result<String<256>, &'static str> {
         let mut escaped = String::new();
-        
+
         for ch in arg.chars() {
             match ch {
                 ' ' | '\t' | '\n' | '\r' | '"' | '\'' | '\\' => {
-                    escaped.push('\\').map_err(|_| "Escaped argument too long")?;
+                    escaped
+                        .push('\\')
+                        .map_err(|_| "Escaped argument too long")?;
                     escaped.push(ch).map_err(|_| "Escaped argument too long")?;
                 }
                 _ => {
@@ -290,7 +299,7 @@ impl CommandParser {
                 }
             }
         }
-        
+
         Ok(escaped)
     }
 }

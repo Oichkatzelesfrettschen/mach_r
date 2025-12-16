@@ -1,14 +1,12 @@
 //! Pure Rust bootloader for Mach_R
 //! ARM64/AArch64 bootloader with UEFI support
 
-
-
-pub mod uefi;
-pub mod multiboot;
-pub mod memory_map;
 pub mod device_tree;
+pub mod memory_map;
+pub mod multiboot;
 pub mod paging;
 pub mod trampoline;
+pub mod uefi;
 
 // Architecture-specific modules
 #[cfg(target_arch = "aarch64")]
@@ -139,13 +137,13 @@ pub struct BootloaderConfig {
 impl Default for BootloaderConfig {
     fn default() -> Self {
         Self {
-            kernel_load_addr: 0x80000,        // 512KB
+            kernel_load_addr: 0x80000,               // 512KB
             kernel_virtual_base: 0xFFFFFF8000000000, // Higher half kernel
-            stack_size: 0x10000,              // 64KB stack
+            stack_size: 0x10000,                     // 64KB stack
             enable_graphics: true,
             preferred_resolution: (1024, 768),
             enable_serial: true,
-            serial_port: 0x3F8,               // COM1
+            serial_port: 0x3F8, // COM1
         }
     }
 }
@@ -156,22 +154,22 @@ pub trait BootProtocol {
     fn init() -> Result<Self, BootError>
     where
         Self: Sized;
-    
+
     /// Get memory map from firmware
     fn get_memory_map(&self) -> Result<&[MemoryMapEntry], BootError>;
-    
+
     /// Exit boot services (point of no return)
     fn exit_boot_services(&mut self) -> Result<(), BootError>;
-    
+
     /// Set up graphics mode
     fn setup_graphics(&mut self, config: &BootloaderConfig) -> Result<FramebufferInfo, BootError>;
-    
+
     /// Get device tree (ARM64 specific)
     fn get_device_tree(&self) -> Result<Option<*const u8>, BootError>;
-    
+
     /// Allocate memory for kernel
     fn allocate_kernel_memory(&mut self, size: u64) -> Result<u64, BootError>;
-    
+
     /// Load kernel from storage
     fn load_kernel(&mut self, kernel_data: &[u8], load_addr: u64) -> Result<(), BootError>;
 }
@@ -199,7 +197,7 @@ pub fn boot_kernel(config: BootloaderConfig) -> ! {
     if config.enable_serial {
         serial_init(config.serial_port);
         serial_println("Mach_R Pure Rust Bootloader v0.1.0");
-        
+
         #[cfg(target_arch = "aarch64")]
         serial_println("Target: ARM64/AArch64");
         #[cfg(target_arch = "x86_64")]
@@ -207,44 +205,44 @@ pub fn boot_kernel(config: BootloaderConfig) -> ! {
         #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
         serial_println("Target: Unknown");
     }
-    
+
     // Architecture-specific initialization
     arch_init();
-    
+
     // Get memory map from UEFI or use default
     let memory_map = get_memory_map();
     serial_println("Memory map obtained");
-    
+
     // Set up graphics if requested
     let framebuffer = if config.enable_graphics {
         setup_graphics(&config)
     } else {
         None
     };
-    
+
     // Get device tree (ARM64 specific)
     let device_tree = get_device_tree();
-    
+
     // Architecture-specific kernel handoff preparation
-    let (page_table_addr, stack_top) = prepare_kernel_handoff(&config, &memory_map);
-    
+    let (page_table_addr, stack_top) = prepare_kernel_handoff(&config, memory_map);
+
     // Create boot info structure as static
     static mut BOOT_INFO_STORAGE: Option<BootInfo> = None;
-    
+
     unsafe {
         BOOT_INFO_STORAGE = Some(BootInfo {
-            memory_map: &memory_map,
+            memory_map,
             device_tree,
             framebuffer,
             command_line: get_command_line(),
             loader_name: "Mach_R Pure Rust Bootloader",
             boot_time: 0, // TODO: Get actual time
         });
-        
+
         let boot_info = (*core::ptr::addr_of!(BOOT_INFO_STORAGE)).as_ref().unwrap();
-        
+
         serial_println("Jumping to kernel...");
-        
+
         // Architecture-specific kernel jump
         arch_jump_to_kernel(
             config.kernel_load_addr,
@@ -262,7 +260,7 @@ pub fn arch_init() {
         trampoline::ensure_el1();
         serial_println("ARM64: Running in EL1");
     }
-    
+
     #[cfg(target_arch = "x86_64")]
     {
         match x86_64::init_x86_64() {
@@ -301,7 +299,7 @@ fn setup_graphics(config: &BootloaderConfig) -> Option<FramebufferInfo> {
             blue_mask_shift: 0,
         })
     }
-    
+
     #[cfg(target_arch = "x86_64")]
     {
         Some(FramebufferInfo {
@@ -319,7 +317,7 @@ fn setup_graphics(config: &BootloaderConfig) -> Option<FramebufferInfo> {
             blue_mask_shift: 0,
         })
     }
-    
+
     #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     None
 }
@@ -331,7 +329,7 @@ fn get_device_tree() -> Option<*const u8> {
         // TODO: Implement device tree detection for ARM64
         None
     }
-    
+
     #[cfg(not(target_arch = "aarch64"))]
     None
 }
@@ -342,12 +340,12 @@ fn get_command_line() -> &'static str {
     {
         "root=/dev/mmcblk0p1 console=ttyAMA0,115200"
     }
-    
+
     #[cfg(target_arch = "x86_64")]
     {
         "root=/dev/sda1 console=ttyS0,115200"
     }
-    
+
     #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     {
         "root=/dev/sda1"
@@ -355,33 +353,30 @@ fn get_command_line() -> &'static str {
 }
 
 /// Prepare for kernel handoff (architecture-specific)
-fn prepare_kernel_handoff(
-    config: &BootloaderConfig,
-    memory_map: &[MemoryMapEntry],
-) -> (u64, u64) {
+fn prepare_kernel_handoff(config: &BootloaderConfig, memory_map: &[MemoryMapEntry]) -> (u64, u64) {
     #[cfg(target_arch = "aarch64")]
     {
         trampoline::prepare_kernel_handoff();
         serial_println("ARM64: Prepared for kernel handoff");
-        
+
         let page_table_addr = setup_page_tables_arm64(memory_map, config.kernel_load_addr);
         let stack_top = config.kernel_virtual_base + 0x100000; // 1MB into higher half
-        
+
         serial_println("ARM64: Page tables set up");
         (page_table_addr, stack_top)
     }
-    
+
     #[cfg(target_arch = "x86_64")]
     {
         serial_println("x86_64: Preparing for kernel handoff");
-        
+
         let page_table_addr = setup_page_tables_x86_64(memory_map, config.kernel_load_addr);
         let stack_top = config.kernel_virtual_base + 0x100000; // 1MB into higher half
-        
+
         serial_println("x86_64: Page tables set up");
         (page_table_addr, stack_top)
     }
-    
+
     #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     {
         serial_println("Generic: Basic handoff preparation");
@@ -394,23 +389,23 @@ fn arch_jump_to_kernel(
     kernel_entry: u64,
     stack_top: u64,
     boot_info: &'static BootInfo,
-    _page_table_addr: u64,
+    page_table_addr: u64,
 ) -> ! {
     #[cfg(target_arch = "aarch64")]
     {
         trampoline::execute_trampoline(kernel_entry, stack_top, boot_info, page_table_addr);
     }
-    
+
     #[cfg(target_arch = "x86_64")]
     {
         x86_64::execute_trampoline_x86_64(kernel_entry, stack_top, boot_info);
     }
-    
+
     #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     {
         // Generic fallback
         unsafe {
-            let kernel_entry: extern "C" fn(&'static BootInfo) -> ! = 
+            let kernel_entry: extern "C" fn(&'static BootInfo) -> ! =
                 core::mem::transmute(kernel_entry);
             kernel_entry(boot_info);
         }
@@ -419,44 +414,45 @@ fn arch_jump_to_kernel(
 
 /// Set up ARM64 page tables for higher half kernel
 #[cfg(target_arch = "aarch64")]
+#[allow(clippy::deref_addrof)] // Raw pointer dereference required for Rust 2024 static mut compatibility
 fn setup_page_tables_arm64(_memory_map: &[MemoryMapEntry], kernel_load_addr: u64) -> u64 {
     use paging::*;
-    
+
     // Allocate root page table (this should be done with proper memory allocator)
     static mut ROOT_PAGE_TABLE: PageTable = PageTable::new();
     static mut ALLOCATED_TABLES: [PageTable; 64] = [PageTable::new(); 64];
     static mut TABLE_INDEX: usize = 0;
-    
+
     unsafe {
         let root_table = &mut *(&raw mut ROOT_PAGE_TABLE);
         let mut page_manager = PageTableManager::new(root_table);
-        
+
         // Simple table allocator
         let allocate_table = || -> Option<&'static mut PageTable> {
-            if TABLE_INDEX < (&*(&raw const ALLOCATED_TABLES)).len() {
-                let table = &mut ALLOCATED_TABLES[TABLE_INDEX];
+            if TABLE_INDEX < (*(&raw const ALLOCATED_TABLES)).len() {
+                let table = &mut *(&raw mut ALLOCATED_TABLES[TABLE_INDEX]);
                 TABLE_INDEX += 1;
                 Some(table)
             } else {
                 None
             }
         };
-        
+
         // Identity map first 4GB for bootloader
         let _ = page_manager.identity_map_low_memory(0x100000000, allocate_table);
-        
+
         // Map kernel to higher half
         let kernel_size = 0x1000000; // 16MB kernel space
         let _ = page_manager.map_kernel_higher_half(kernel_load_addr, kernel_size, allocate_table);
-        
+
         // Map device memory (UART, etc.)
         let _ = page_manager.map_device(
             HIGHER_HALF_OFFSET + 0x09000000, // UART virtual address
-            0x09000000,                       // UART physical address  
+            0x09000000,                      // UART physical address
             0x1000,                          // 4KB
             allocate_table,
         );
-        
+
         page_manager.root_address()
     }
 }
@@ -465,24 +461,20 @@ fn setup_page_tables_arm64(_memory_map: &[MemoryMapEntry], kernel_load_addr: u64
 #[cfg(target_arch = "x86_64")]
 fn setup_page_tables_x86_64(_memory_map: &[MemoryMapEntry], kernel_load_addr: u64) -> u64 {
     use x86_64::*;
-    
+
     // Allocate PML4 (root page table)
     static mut PML4: PageTable = PageTable::new();
-    
+
     unsafe {
         let pml4 = &mut *core::ptr::addr_of_mut!(PML4);
         let mut mem_manager = X86_64MemoryManager::new(pml4);
-        
+
         // Identity map first 4GB for bootloader
         for addr in (0u64..0x100000000).step_by(0x200000) {
             // Use 2MB pages for simplicity
-            let _ = mem_manager.map_page(
-                addr,
-                addr,
-                PAGE_PRESENT | PAGE_WRITABLE | PAGE_HUGE,
-            );
+            let _ = mem_manager.map_page(addr, addr, PAGE_PRESENT | PAGE_WRITABLE | PAGE_HUGE);
         }
-        
+
         // Map kernel to higher half
         let kernel_virt_addr = KERNEL_VIRTUAL_BASE;
         for offset in (0u64..0x1000000).step_by(0x1000) {
@@ -492,7 +484,7 @@ fn setup_page_tables_x86_64(_memory_map: &[MemoryMapEntry], kernel_load_addr: u6
                 PAGE_PRESENT | PAGE_WRITABLE,
             );
         }
-        
+
         mem_manager.pml4_address()
     }
 }
@@ -522,24 +514,26 @@ pub fn serial_println(s: &str) {
 extern "C" {
     /// Set up ARM64 page tables and enable MMU
     fn setup_arm64_paging(virtual_base: u64, physical_base: u64);
-    
+
     /// Initialize PL011 UART for debug output
     fn init_pl011_uart();
-    
+
     // Other externs declared here; uart_print_string is declared conditionally below
-    
+
     /// Jump to kernel entry point (defined in assembly)
     fn jump_to_kernel_asm(entry_point: u64, stack_pointer: u64, boot_info: u64) -> !;
 }
 
 // Declare uart_print_string only for non-test builds; tests provide a stub
 #[cfg(not(test))]
-extern "C" { fn uart_print_string(s: *const u8, len: usize); }
+extern "C" {
+    fn uart_print_string(s: *const u8, len: usize);
+}
 
 // Provide a dummy UART print for tests to satisfy linking
 #[cfg(test)]
 #[no_mangle]
-pub extern "C" fn uart_print_string(_s: *const u8, _len: usize) { }
+pub extern "C" fn uart_print_string(_s: *const u8, _len: usize) {}
 
 /// Jump to kernel entry point
 unsafe fn jump_to_kernel(entry_point: u64, stack_pointer: u64, boot_info: u64) -> ! {
@@ -565,7 +559,3 @@ pub extern "C" fn efi_main() -> ! {
     let config = BootloaderConfig::default();
     boot_kernel(config)
 }
-
-
-
-

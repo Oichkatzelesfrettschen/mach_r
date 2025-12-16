@@ -1,7 +1,9 @@
 //! Multiboot2 specification support
 //! For x86_64 systems (legacy support)
 
-use crate::boot::{BootProtocol, BootError, MemoryMapEntry, MemoryType, FramebufferInfo, BootloaderConfig};
+use crate::boot::{
+    BootError, BootProtocol, BootloaderConfig, FramebufferInfo, MemoryMapEntry, MemoryType,
+};
 
 /// Multiboot2 header magic number
 pub const MULTIBOOT2_HEADER_MAGIC: u32 = 0xe85250d6;
@@ -105,60 +107,66 @@ pub struct Multiboot2Protocol {
 
 impl Multiboot2Protocol {
     /// Initialize from multiboot2 information pointer
+    ///
+    /// # Safety
+    ///
+    /// - `info_ptr` must point to a valid Multiboot2 information structure
+    /// - The structure must remain valid for the lifetime of the returned object
     pub unsafe fn from_info(info_ptr: *const Multiboot2Info) -> Result<Self, BootError> {
         if info_ptr.is_null() {
             return Err(BootError::UefiError("Null multiboot2 info"));
         }
-        
-        Ok(Self {
-            info: info_ptr,
-        })
+
+        Ok(Self { info: info_ptr })
     }
-    
+
     /// Find a tag by type
     fn find_tag(&self, tag_type: Multiboot2TagType) -> Option<*const Multiboot2Tag> {
         unsafe {
             let info = &*self.info;
             let mut current = (self.info as *const u8).add(8); // Skip total_size and reserved
             let end = (self.info as *const u8).add(info.total_size as usize);
-            
+
             while current < end {
                 let tag = current as *const Multiboot2Tag;
                 let tag_ref = &*tag;
-                
+
                 if tag_ref.tag_type == tag_type as u32 {
                     return Some(tag);
                 }
-                
+
                 if tag_ref.tag_type == Multiboot2TagType::End as u32 {
                     break;
                 }
-                
+
                 // Move to next tag (align to 8 bytes)
                 let size = (tag_ref.size + 7) & !7;
                 current = current.add(size as usize);
             }
-            
+
             None
         }
     }
-    
+
     /// Get memory map from multiboot2
     fn get_multiboot_memory_map(&self) -> Result<&[MemoryMapEntry], BootError> {
         // TODO: Parse multiboot2 memory map
         // This would find the memory map tag and convert entries
-        Err(BootError::UefiError("Multiboot2 memory map not implemented"))
+        Err(BootError::UefiError(
+            "Multiboot2 memory map not implemented",
+        ))
     }
-    
+
     /// Get framebuffer information
     fn get_multiboot_framebuffer(&self) -> Result<FramebufferInfo, BootError> {
-        let tag_ptr = self.find_tag(Multiboot2TagType::Framebuffer)
+        let tag_ptr = self
+            .find_tag(Multiboot2TagType::Framebuffer)
             .ok_or(BootError::GraphicsError)?;
-            
+
         unsafe {
             let fb_tag = tag_ptr as *const Multiboot2FramebufferTag;
             let fb = &*fb_tag;
-            
+
             Ok(FramebufferInfo {
                 addr: fb.framebuffer_addr,
                 width: fb.framebuffer_width,
@@ -180,31 +188,33 @@ impl Multiboot2Protocol {
 impl BootProtocol for Multiboot2Protocol {
     fn init() -> Result<Self, BootError> {
         // Multiboot2 protocol is initialized externally by bootloader
-        Err(BootError::UefiError("Multiboot2 requires external initialization"))
+        Err(BootError::UefiError(
+            "Multiboot2 requires external initialization",
+        ))
     }
-    
+
     fn get_memory_map(&self) -> Result<&[MemoryMapEntry], BootError> {
         self.get_multiboot_memory_map()
     }
-    
+
     fn exit_boot_services(&mut self) -> Result<(), BootError> {
         // Multiboot2 doesn't have boot services to exit
         Ok(())
     }
-    
+
     fn setup_graphics(&mut self, config: &BootloaderConfig) -> Result<FramebufferInfo, BootError> {
         if !config.enable_graphics {
             return Err(BootError::GraphicsError);
         }
-        
+
         self.get_multiboot_framebuffer()
     }
-    
+
     fn get_device_tree(&self) -> Result<Option<*const u8>, BootError> {
         // x86_64 doesn't typically use device trees
         Ok(None)
     }
-    
+
     fn allocate_kernel_memory(&mut self, _size: u64) -> Result<u64, BootError> {
         // Memory allocation not available in multiboot2
         Err(BootError::OutOfMemory)
@@ -219,7 +229,7 @@ impl BootProtocol for Multiboot2Protocol {
 /// Convert multiboot2 memory type to our memory type
 fn convert_multiboot_memory_type(mb_type: u32) -> MemoryType {
     match mb_type {
-        1 => MemoryType::Available,        // Available
+        1 => MemoryType::Available,       // Available
         3 => MemoryType::AcpiReclaimable, // ACPI reclaimable
         4 => MemoryType::AcpiNvs,         // ACPI NVS
         5 => MemoryType::BadMemory,       // Bad memory
@@ -232,34 +242,37 @@ pub const fn generate_multiboot2_header() -> [u8; 32] {
     let magic = MULTIBOOT2_HEADER_MAGIC;
     let arch = 0; // i386 (also works for x86_64)
     let length = 32;
-    let checksum = 0u32.wrapping_sub(magic).wrapping_sub(arch).wrapping_sub(length);
-    
+    let checksum = 0u32
+        .wrapping_sub(magic)
+        .wrapping_sub(arch)
+        .wrapping_sub(length);
+
     let mut header = [0u8; 32];
-    
+
     // Magic
     header[0] = (magic & 0xff) as u8;
     header[1] = ((magic >> 8) & 0xff) as u8;
     header[2] = ((magic >> 16) & 0xff) as u8;
     header[3] = ((magic >> 24) & 0xff) as u8;
-    
+
     // Architecture
     header[4] = (arch & 0xff) as u8;
     header[5] = ((arch >> 8) & 0xff) as u8;
     header[6] = ((arch >> 16) & 0xff) as u8;
     header[7] = ((arch >> 24) & 0xff) as u8;
-    
+
     // Header length
     header[8] = (length & 0xff) as u8;
     header[9] = ((length >> 8) & 0xff) as u8;
     header[10] = ((length >> 16) & 0xff) as u8;
     header[11] = ((length >> 24) & 0xff) as u8;
-    
+
     // Checksum
     header[12] = (checksum & 0xff) as u8;
     header[13] = ((checksum >> 8) & 0xff) as u8;
     header[14] = ((checksum >> 16) & 0xff) as u8;
     header[15] = ((checksum >> 24) & 0xff) as u8;
-    
+
     // End tag
     header[16] = 0; // type = 0 (end)
     header[17] = 0;
@@ -269,7 +282,7 @@ pub const fn generate_multiboot2_header() -> [u8; 32] {
     header[21] = 0;
     header[22] = 0;
     header[23] = 0;
-    
+
     // Padding to 32 bytes
     header
 }

@@ -1,5 +1,4 @@
 /// C code generator for legacy Mach compatibility
-
 use super::{CodeGenerator, CodegenError};
 use crate::parser::ast::*;
 
@@ -163,8 +162,10 @@ impl CCodeGenerator {
                 Direction::In => {
                     proto.push_str(&self.map_type(&arg.arg_type));
                 }
-                Direction::RequestPort | Direction::ReplyPort
-                | Direction::SReplyPort | Direction::UReplyPort => {
+                Direction::RequestPort
+                | Direction::ReplyPort
+                | Direction::SReplyPort
+                | Direction::UReplyPort => {
                     proto.push_str("mach_port_t");
                 }
                 Direction::WaitTime => {

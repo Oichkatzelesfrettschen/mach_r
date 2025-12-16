@@ -1,8 +1,8 @@
 //! Complete C server stub generation with message unpacking and demux
 
-use crate::semantic::{AnalyzedSubsystem, AnalyzedRoutine};
-use crate::parser::ast::Direction;
 use super::CodegenError;
+use crate::parser::ast::Direction;
+use crate::semantic::{AnalyzedRoutine, AnalyzedSubsystem};
 
 pub struct CServerStubGenerator {
     _server_prefix: String,
@@ -20,7 +20,10 @@ impl CServerStubGenerator {
         let mut output = String::new();
 
         // Header comment
-        output.push_str(&format!("/* Server stubs for {} subsystem */\n\n", analyzed.name));
+        output.push_str(&format!(
+            "/* Server stubs for {} subsystem */\n\n",
+            analyzed.name
+        ));
         output.push_str(&format!("#include \"{}Server.h\"\n", analyzed.name));
         output.push_str("#include <mach/message.h>\n");
         output.push_str("#include <mach/mig_errors.h>\n");
@@ -98,10 +101,20 @@ impl CServerStubGenerator {
 
         for arg in &routine.routine.args {
             // Check if this is an array parameter by checking the message layout
-            let is_array_in_request = routine.request_layout.fields.iter()
+            let is_array_in_request = routine
+                .request_layout
+                .fields
+                .iter()
                 .any(|f| f.name == arg.name && f.is_array);
-            let is_array_in_reply = routine.reply_layout.as_ref()
-                .map(|layout| layout.fields.iter().any(|f| f.name == arg.name && f.is_array))
+            let is_array_in_reply = routine
+                .reply_layout
+                .as_ref()
+                .map(|layout| {
+                    layout
+                        .fields
+                        .iter()
+                        .any(|f| f.name == arg.name && f.is_array)
+                })
                 .unwrap_or(false);
 
             let is_array = is_array_in_request || is_array_in_reply;
@@ -109,10 +122,17 @@ impl CServerStubGenerator {
             // Get the resolved C type from the message layout
             let base_type = if is_array {
                 // For arrays, get the element type from the layout
-                let field_in_request = routine.request_layout.fields.iter()
+                let field_in_request = routine
+                    .request_layout
+                    .fields
+                    .iter()
                     .find(|f| f.name == arg.name && f.is_array);
-                let field_in_reply = routine.reply_layout.as_ref()
-                    .and_then(|layout| layout.fields.iter().find(|f| f.name == arg.name && f.is_array));
+                let field_in_reply = routine.reply_layout.as_ref().and_then(|layout| {
+                    layout
+                        .fields
+                        .iter()
+                        .find(|f| f.name == arg.name && f.is_array)
+                });
 
                 let field = field_in_request.or(field_in_reply);
                 if let Some(f) = field {
@@ -120,7 +140,10 @@ impl CServerStubGenerator {
                     f.c_type.trim_end_matches('*').trim().to_string()
                 } else {
                     // Fallback to AST type
-                    self.get_c_type_for_arg(arg).trim_end_matches('*').trim().to_string()
+                    self.get_c_type_for_arg(arg)
+                        .trim_end_matches('*')
+                        .trim()
+                        .to_string()
                 }
             } else {
                 // For non-arrays, use AST type
@@ -165,11 +188,18 @@ impl CServerStubGenerator {
     }
 
     /// Generate a single server stub (_X routine)
-    fn generate_server_stub(&self, routine: &AnalyzedRoutine, _subsystem_name: &str) -> Result<String, CodegenError> {
+    fn generate_server_stub(
+        &self,
+        routine: &AnalyzedRoutine,
+        _subsystem_name: &str,
+    ) -> Result<String, CodegenError> {
         let mut output = String::new();
 
         // Function signature
-        output.push_str(&format!("kern_return_t {}(\n", routine.server_function_name));
+        output.push_str(&format!(
+            "kern_return_t {}(\n",
+            routine.server_function_name
+        ));
         output.push_str("    mach_msg_header_t *InHeadP,\n");
         output.push_str("    mach_msg_header_t *OutHeadP)\n");
         output.push_str("{\n");
@@ -214,7 +244,10 @@ impl CServerStubGenerator {
     }
 
     /// Generate message structure definitions for server stub
-    fn generate_server_message_structures(&self, routine: &AnalyzedRoutine) -> Result<String, CodegenError> {
+    fn generate_server_message_structures(
+        &self,
+        routine: &AnalyzedRoutine,
+    ) -> Result<String, CodegenError> {
         let mut output = String::new();
 
         // Request structure - use layout fields directly
@@ -245,7 +278,10 @@ impl CServerStubGenerator {
     }
 
     /// Generate parameter extraction code with validation
-    fn generate_parameter_extraction(&self, routine: &AnalyzedRoutine) -> Result<String, CodegenError> {
+    fn generate_parameter_extraction(
+        &self,
+        routine: &AnalyzedRoutine,
+    ) -> Result<String, CodegenError> {
         let mut output = String::new();
 
         output.push_str("    /* Validate and extract parameters */\n");
@@ -256,7 +292,10 @@ impl CServerStubGenerator {
                 let base_name = field.name.strip_suffix("Type").unwrap_or(&field.name);
 
                 // Find the corresponding data field
-                let data_field = routine.request_layout.fields.iter()
+                let data_field = routine
+                    .request_layout
+                    .fields
+                    .iter()
                     .find(|f| f.name == base_name && !f.is_type_descriptor)
                     .unwrap_or(field);
 
@@ -264,37 +303,52 @@ impl CServerStubGenerator {
                 let bit_size = data_field.mach_type.bit_size();
 
                 // Validate msgt_name
-                output.push_str(&format!("    if (In0P->{}.msgt_name != {}) {{\n", field.name, mach_const));
+                output.push_str(&format!(
+                    "    if (In0P->{}.msgt_name != {}) {{\n",
+                    field.name, mach_const
+                ));
                 output.push_str("        return MIG_BAD_ARGUMENTS;\n");
                 output.push_str("    }\n");
 
                 // Validate msgt_size
-                output.push_str(&format!("    if (In0P->{}.msgt_size != {}) {{\n", field.name, bit_size));
+                output.push_str(&format!(
+                    "    if (In0P->{}.msgt_size != {}) {{\n",
+                    field.name, bit_size
+                ));
                 output.push_str("        return MIG_BAD_ARGUMENTS;\n");
                 output.push_str("    }\n");
 
                 // For arrays, extract and validate count
                 if data_field.is_array {
                     let count_name = format!("{}Cnt", base_name);
-                    output.push_str(&format!("    mach_msg_type_number_t {} = In0P->{}.msgt_number;\n",
-                        count_name, field.name));
+                    output.push_str(&format!(
+                        "    mach_msg_type_number_t {} = In0P->{}.msgt_number;\n",
+                        count_name, field.name
+                    ));
 
                     // Validate count bounds if there's a maximum
                     if let Some(max) = data_field.max_array_elements {
                         output.push_str(&format!("    if ({} > {}) {{\n", count_name, max));
-                        output.push_str("        return MIG_BAD_ARGUMENTS; /* Array count exceeds maximum */\n");
+                        output.push_str(
+                            "        return MIG_BAD_ARGUMENTS; /* Array count exceeds maximum */\n",
+                        );
                         output.push_str("    }\n");
                     }
                 } else {
                     // Non-array: validate msgt_number is 1
-                    output.push_str(&format!("    if (In0P->{}.msgt_number != 1) {{\n", field.name));
+                    output.push_str(&format!(
+                        "    if (In0P->{}.msgt_number != 1) {{\n",
+                        field.name
+                    ));
                     output.push_str("        return MIG_BAD_ARGUMENTS;\n");
                     output.push_str("    }\n");
                 }
 
                 // Validate inline flag
                 output.push_str(&format!("    if (!In0P->{}.msgt_inline) {{\n", field.name));
-                output.push_str("        return MIG_BAD_ARGUMENTS; /* Out-of-line not yet supported */\n");
+                output.push_str(
+                    "        return MIG_BAD_ARGUMENTS; /* Out-of-line not yet supported */\n",
+                );
                 output.push_str("    }\n");
 
                 output.push('\n');
@@ -342,10 +396,20 @@ impl CServerStubGenerator {
         let mut first = true;
         for arg in &routine.routine.args {
             // Check if this argument is an array
-            let is_array_in_request = routine.request_layout.fields.iter()
+            let is_array_in_request = routine
+                .request_layout
+                .fields
+                .iter()
                 .any(|f| f.name == arg.name && f.is_array);
-            let is_array_in_reply = routine.reply_layout.as_ref()
-                .map(|layout| layout.fields.iter().any(|f| f.name == arg.name && f.is_array))
+            let is_array_in_reply = routine
+                .reply_layout
+                .as_ref()
+                .map(|layout| {
+                    layout
+                        .fields
+                        .iter()
+                        .any(|f| f.name == arg.name && f.is_array)
+                })
                 .unwrap_or(false);
             let is_array = is_array_in_request || is_array_in_reply;
 
@@ -417,7 +481,9 @@ impl CServerStubGenerator {
                     let base_name = field.name.strip_suffix("Type").unwrap_or(&field.name);
 
                     // Find the corresponding data field
-                    let data_field = reply_layout.fields.iter()
+                    let data_field = reply_layout
+                        .fields
+                        .iter()
                         .find(|f| f.name == base_name && !f.is_type_descriptor)
                         .unwrap_or(field);
 
@@ -425,28 +491,46 @@ impl CServerStubGenerator {
                     let bit_size = data_field.mach_type.bit_size();
 
                     // Pack type descriptor
-                    output.push_str(&format!("    OutP->{}.msgt_name = {};\n", field.name, mach_const));
-                    output.push_str(&format!("    OutP->{}.msgt_size = {};\n", field.name, bit_size));
+                    output.push_str(&format!(
+                        "    OutP->{}.msgt_name = {};\n",
+                        field.name, mach_const
+                    ));
+                    output.push_str(&format!(
+                        "    OutP->{}.msgt_size = {};\n",
+                        field.name, bit_size
+                    ));
 
                     // For arrays, use the count variable; for scalars, use 1
                     if data_field.is_array {
                         let count_name = format!("{}Cnt", base_name);
-                        output.push_str(&format!("    OutP->{}.msgt_number = {}; /* Array count */\n",
-                            field.name, count_name));
+                        output.push_str(&format!(
+                            "    OutP->{}.msgt_number = {}; /* Array count */\n",
+                            field.name, count_name
+                        ));
                     } else {
                         output.push_str(&format!("    OutP->{}.msgt_number = 1;\n", field.name));
                     }
 
                     output.push_str(&format!("    OutP->{}.msgt_inline = TRUE;\n", field.name));
-                    output.push_str(&format!("    OutP->{}.msgt_longform = FALSE;\n", field.name));
-                    output.push_str(&format!("    OutP->{}.msgt_deallocate = FALSE;\n", field.name));
+                    output.push_str(&format!(
+                        "    OutP->{}.msgt_longform = FALSE;\n",
+                        field.name
+                    ));
+                    output.push_str(&format!(
+                        "    OutP->{}.msgt_deallocate = FALSE;\n",
+                        field.name
+                    ));
                     output.push_str(&format!("    OutP->{}.msgt_unused = 0;\n\n", field.name));
-
-                } else if !field.is_type_descriptor && !field.is_count_field && field.name != "RetCode" {
+                } else if !field.is_type_descriptor
+                    && !field.is_count_field
+                    && field.name != "RetCode"
+                {
                     // Pack data field (for OUT parameters, use local variable)
                     if field.is_array {
-                        output.push_str(&format!("    OutP->{} = {}; /* TODO: handle array packing */\n",
-                            field.name, field.name));
+                        output.push_str(&format!(
+                            "    OutP->{} = {}; /* TODO: handle array packing */\n",
+                            field.name, field.name
+                        ));
                     } else {
                         output.push_str(&format!("    OutP->{} = {};\n", field.name, field.name));
                     }
@@ -462,7 +546,10 @@ impl CServerStubGenerator {
     fn generate_demux(&self, analyzed: &AnalyzedSubsystem) -> Result<String, CodegenError> {
         let mut output = String::new();
 
-        output.push_str(&format!("/* Demux function for {} subsystem */\n", analyzed.name));
+        output.push_str(&format!(
+            "/* Demux function for {} subsystem */\n",
+            analyzed.name
+        ));
         output.push_str("#ifdef __cplusplus\n");
         output.push_str("extern \"C\" {\n");
         output.push_str("#endif\n\n");
@@ -489,18 +576,29 @@ impl CServerStubGenerator {
 
         // Dispatch based on message ID
         output.push_str(&format!("    /* Dispatch to appropriate handler */\n"));
-        output.push_str(&format!("    if (msgid >= {} && msgid < {} + {}) {{\n",
-            analyzed.base, analyzed.base, analyzed.routines.len()));
+        output.push_str(&format!(
+            "    if (msgid >= {} && msgid < {} + {}) {{\n",
+            analyzed.base,
+            analyzed.base,
+            analyzed.routines.len()
+        ));
         output.push_str(&format!("        switch (msgid - {}) {{\n", analyzed.base));
 
         for (i, routine) in analyzed.routines.iter().enumerate() {
-            output.push_str(&format!("            case {}:  /* {} */\n", i, routine.name));
-            output.push_str(&format!("                check_result = {}(InHeadP, OutHeadP);\n",
-                routine.server_function_name));
+            output.push_str(&format!(
+                "            case {}:  /* {} */\n",
+                i, routine.name
+            ));
+            output.push_str(&format!(
+                "                check_result = {}(InHeadP, OutHeadP);\n",
+                routine.server_function_name
+            ));
 
             if routine.is_simple {
                 output.push_str("                if (check_result == MIG_NO_REPLY) {\n");
-                output.push_str("                    return FALSE;  /* No reply for simpleroutine */\n");
+                output.push_str(
+                    "                    return FALSE;  /* No reply for simpleroutine */\n",
+                );
                 output.push_str("                }\n");
             }
 
@@ -533,13 +631,11 @@ impl CServerStubGenerator {
     /// Get C type for an argument
     fn get_c_type_for_arg(&self, arg: &crate::parser::ast::Argument) -> String {
         match &arg.arg_type {
-            crate::parser::ast::TypeSpec::Basic(name) => {
-                match name.as_str() {
-                    "int32_t" | "int" => "int32_t".to_string(),
-                    "mach_port_t" => "mach_port_t".to_string(),
-                    _ => name.clone(),
-                }
-            }
+            crate::parser::ast::TypeSpec::Basic(name) => match name.as_str() {
+                "int32_t" | "int" => "int32_t".to_string(),
+                "mach_port_t" => "mach_port_t".to_string(),
+                _ => name.clone(),
+            },
             _ => "int32_t".to_string(),
         }
     }

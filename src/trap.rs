@@ -2,8 +2,8 @@
 //!
 //! Implements both traditional Mach traps and POSIX syscall emulation
 
-use crate::types::{PortId, TaskId};
 use crate::port::Port;
+use crate::types::{PortId, TaskId};
 
 /// Mach trap numbers (negative for Mach, positive for POSIX)
 #[repr(i32)]
@@ -29,7 +29,7 @@ pub enum TrapNumber {
     MkTimerDestroy = -92,
     MkTimerArm = -93,
     MkTimerCancel = -94,
-    
+
     // POSIX syscalls (positive numbers - Linux compatible)
     Read = 0,
     Write = 1,
@@ -98,7 +98,6 @@ pub enum TrapError {
     IoError,
     NotImplemented,
 }
-
 
 /// Mach message trap arguments
 #[repr(C)]
@@ -180,21 +179,21 @@ fn mach_host_self() -> TrapReturn {
 fn mach_msg_trap(args: &MachMsgArgs) -> TrapReturn {
     // Core Mach message send/receive
     // This is the heart of Mach IPC
-    
+
     let option = args.option;
     let send = (option & 0x1) != 0;
     let receive = (option & 0x2) != 0;
-    
+
     if send {
         // Send message
         // TODO: Marshal message and send via port
     }
-    
+
     if receive {
         // Receive message
         // TODO: Receive from port and unmarshal
     }
-    
+
     Ok(0)
 }
 
@@ -206,16 +205,16 @@ fn sys_read(fd: usize, buf: *mut u8, count: usize) -> TrapReturn {
     if fd == 0 {
         let mut bytes_read = 0;
         let buffer = unsafe { core::slice::from_raw_parts_mut(buf, count) };
-        
-        for i in 0..count {
+
+        for slot in buffer.iter_mut().take(count) {
             if let Some(byte) = crate::drivers::serial::read_byte() {
-                buffer[i] = byte;
+                *slot = byte;
                 bytes_read += 1;
             } else {
                 break;
             }
         }
-        
+
         Ok(bytes_read)
     } else {
         Err(TrapError::InvalidArgument)
@@ -227,11 +226,11 @@ fn sys_write(fd: usize, buf: *const u8, count: usize) -> TrapReturn {
     // For now, write to serial if fd == 1 or 2 (stdout/stderr)
     if fd == 1 || fd == 2 {
         let buffer = unsafe { core::slice::from_raw_parts(buf, count) };
-        
+
         for &byte in buffer {
             crate::drivers::serial::write_byte(byte);
         }
-        
+
         Ok(count)
     } else {
         Err(TrapError::InvalidArgument)
@@ -242,7 +241,7 @@ fn sys_open(path: *const u8, flags: i32, _mode: u32) -> TrapReturn {
     if path.is_null() {
         return Err(TrapError::InvalidArgument);
     }
-    
+
     // Convert C string to Rust string
     let path_str = unsafe {
         let mut len = 0;
@@ -251,19 +250,21 @@ fn sys_open(path: *const u8, flags: i32, _mode: u32) -> TrapReturn {
         }
         core::slice::from_raw_parts(path, len)
     };
-    
+
     let path_string = match core::str::from_utf8(path_str) {
         Ok(s) => s,
         Err(_) => return Err(TrapError::InvalidArgument),
     };
-    
+
     // Create message for file server
-    let file_server_port = crate::port::PORT_REGISTRY.lookup_port("file_server").unwrap_or(crate::types::PortId(1));
+    let file_server_port = crate::port::PORT_REGISTRY
+        .lookup_port("file_server")
+        .unwrap_or(crate::types::PortId(1));
     let mut data = alloc::vec::Vec::new();
     data.extend_from_slice(path_string.as_bytes());
     data.extend_from_slice(&flags.to_le_bytes());
     let msg = crate::message::Message::new_out_of_line(file_server_port, data);
-    
+
     // Send to file server
     match crate::port::send_message(file_server_port, msg) {
         Ok(_) => Ok(3), // Return file descriptor 3
@@ -276,12 +277,14 @@ fn sys_close(fd: usize) -> TrapReturn {
         // Don't close stdin, stdout, stderr
         return Err(TrapError::InvalidArgument);
     }
-    
+
     // Send close message to file server
-    let file_server_port = crate::port::PORT_REGISTRY.lookup_port("file_server").unwrap_or(crate::types::PortId(1));
+    let file_server_port = crate::port::PORT_REGISTRY
+        .lookup_port("file_server")
+        .unwrap_or(crate::types::PortId(1));
     let data = fd.to_le_bytes().to_vec();
     let msg = crate::message::Message::new_out_of_line(file_server_port, data);
-    
+
     match crate::port::send_message(file_server_port, msg) {
         Ok(_) => Ok(0),
         Err(_) => Err(TrapError::ResourceNotFound),

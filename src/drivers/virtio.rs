@@ -5,6 +5,7 @@
 
 use crate::memory::page_manager;
 use crate::paging::{PhysicalAddress, VirtualAddress};
+use alloc::vec;
 use alloc::vec::Vec;
 use spin::Mutex;
 
@@ -106,15 +107,17 @@ impl VirtQueue {
     /// Create a new VirtQueue
     pub fn new(size: u16) -> Self {
         let mut desc = Vec::with_capacity(size as usize);
-        desc.resize(size as usize, VirtQueueDesc {
-            addr: 0,
-            len: 0,
-            flags: 0,
-            next: 0,
-        });
+        desc.resize(
+            size as usize,
+            VirtQueueDesc {
+                addr: 0,
+                len: 0,
+                flags: 0,
+                next: 0,
+            },
+        );
 
-        let mut ring = Vec::with_capacity(size as usize);
-        ring.resize(size as usize, 0);
+        let ring = vec![0; size as usize];
 
         let mut used_ring = Vec::with_capacity(size as usize);
         used_ring.resize(size as usize, VirtQueueUsedElem { id: 0, len: 0 });
@@ -199,9 +202,7 @@ impl VirtIODevice {
 
     /// Read from device register
     pub fn read_register(&self, offset: usize) -> u32 {
-        unsafe {
-            core::ptr::read_volatile((self.base_addr.0 + offset) as *const u32)
-        }
+        unsafe { core::ptr::read_volatile((self.base_addr.0 + offset) as *const u32) }
     }
 
     /// Write to device register
@@ -230,13 +231,13 @@ impl VirtIODevice {
         match self.device_type {
             VirtIODeviceType::Console => {
                 self.initialize_console_queues()?;
-            },
+            }
             VirtIODeviceType::Block => {
                 self.initialize_block_queues()?;
-            },
+            }
             VirtIODeviceType::Network => {
                 self.initialize_network_queues()?;
-            },
+            }
             _ => {
                 return Err("Unsupported VirtIO device type");
             }
@@ -244,9 +245,9 @@ impl VirtIODevice {
 
         // Set FEATURES_OK status bit
         self.set_status(
-            VirtIOStatus::Acknowledge as u32 
-            | VirtIOStatus::Driver as u32 
-            | VirtIOStatus::FeaturesOk as u32
+            VirtIOStatus::Acknowledge as u32
+                | VirtIOStatus::Driver as u32
+                | VirtIOStatus::FeaturesOk as u32,
         );
 
         // Verify FEATURES_OK
@@ -256,10 +257,10 @@ impl VirtIODevice {
 
         // Set DRIVER_OK status bit
         self.set_status(
-            VirtIOStatus::Acknowledge as u32 
-            | VirtIOStatus::Driver as u32 
-            | VirtIOStatus::FeaturesOk as u32
-            | VirtIOStatus::DriverOk as u32
+            VirtIOStatus::Acknowledge as u32
+                | VirtIOStatus::Driver as u32
+                | VirtIOStatus::FeaturesOk as u32
+                | VirtIOStatus::DriverOk as u32,
         );
 
         crate::println!("VirtIO {:?} device initialized", self.device_type);
@@ -277,10 +278,10 @@ impl VirtIODevice {
         // Console devices typically have 2 queues: receive and transmit
         let rx_queue = VirtQueue::new(16);
         let tx_queue = VirtQueue::new(16);
-        
+
         self.queues.push(rx_queue);
         self.queues.push(tx_queue);
-        
+
         crate::println!("Console queues initialized");
         Ok(())
     }
@@ -289,9 +290,9 @@ impl VirtIODevice {
     fn initialize_block_queues(&mut self) -> Result<(), &'static str> {
         // Block devices typically have 1 request queue
         let request_queue = VirtQueue::new(128);
-        
+
         self.queues.push(request_queue);
-        
+
         crate::println!("Block device queues initialized");
         Ok(())
     }
@@ -301,10 +302,10 @@ impl VirtIODevice {
         // Network devices typically have RX and TX queues
         let rx_queue = VirtQueue::new(256);
         let tx_queue = VirtQueue::new(256);
-        
+
         self.queues.push(rx_queue);
         self.queues.push(tx_queue);
-        
+
         crate::println!("Network queues initialized");
         Ok(())
     }
@@ -321,7 +322,8 @@ impl VirtIODevice {
 
         // Allocate a page for the buffer
         let page_manager = page_manager();
-        let buffer_page = page_manager.allocate_page()
+        let buffer_page = page_manager
+            .allocate_page()
             .map_err(|_| "Failed to allocate buffer page")?;
 
         // Copy data to buffer (simplified - in real implementation would handle larger data)
@@ -350,12 +352,12 @@ impl VirtIODevice {
         // Implementation would create a VirtIO block request
         // For demonstration, we'll simulate a successful read
         crate::println!("Block read from sector {} ({} bytes)", sector, buffer.len());
-        
+
         // Fill with sample data
         for (i, byte) in buffer.iter_mut().enumerate() {
             *byte = (i as u8).wrapping_add(sector as u8);
         }
-        
+
         Ok(())
     }
 
@@ -366,13 +368,13 @@ impl VirtIODevice {
         }
 
         crate::println!("Sending network packet ({} bytes)", packet.len());
-        
+
         // Implementation would add packet to TX queue
         // For demonstration, we'll just log it
-        if packet.len() > 0 {
+        if !packet.is_empty() {
             crate::println!("First byte: 0x{:02x}", packet[0]);
         }
-        
+
         Ok(())
     }
 }
@@ -393,7 +395,7 @@ impl VirtIOManager {
     /// Probe for VirtIO devices at standard MMIO addresses
     pub fn probe_devices(&self) {
         let mut devices = self.devices.lock();
-        
+
         // Standard VirtIO MMIO addresses in QEMU ARM64 virt machine
         let virtio_addresses = [
             0x0a000000, // First VirtIO device
@@ -404,18 +406,15 @@ impl VirtIOManager {
 
         for &addr in &virtio_addresses {
             let base_addr = VirtualAddress(addr);
-            
+
             // Check for VirtIO magic number
-            let magic = unsafe {
-                core::ptr::read_volatile(addr as *const u32)
-            };
-            
-            if magic == 0x74726976 { // "virt" in little endian
+            let magic = unsafe { core::ptr::read_volatile(addr as *const u32) };
+
+            if magic == 0x74726976 {
+                // "virt" in little endian
                 // Read device ID
-                let device_id = unsafe {
-                    core::ptr::read_volatile((addr + 0x08) as *const u32)
-                };
-                
+                let device_id = unsafe { core::ptr::read_volatile((addr + 0x08) as *const u32) };
+
                 let device_type = match device_id {
                     1 => VirtIODeviceType::Network,
                     2 => VirtIODeviceType::Block,
@@ -423,60 +422,66 @@ impl VirtIOManager {
                     4 => VirtIODeviceType::Entropy,
                     _ => continue, // Skip unknown devices
                 };
-                
+
                 crate::println!("Found VirtIO {:?} device at 0x{:08x}", device_type, addr);
-                
+
                 let mut device = VirtIODevice::new(device_type, base_addr);
                 if device.initialize().is_ok() {
                     devices.push(device);
                 }
             }
         }
-        
+
         crate::println!("VirtIO probe complete: {} devices found", devices.len());
     }
 
     /// Check if console device is available
     pub fn has_console(&self) -> bool {
         let devices = self.devices.lock();
-        devices.iter().any(|d| matches!(d.device_type, VirtIODeviceType::Console))
+        devices
+            .iter()
+            .any(|d| matches!(d.device_type, VirtIODeviceType::Console))
     }
 
     /// Check if block device is available
     pub fn has_block_device(&self) -> bool {
         let devices = self.devices.lock();
-        devices.iter().any(|d| matches!(d.device_type, VirtIODeviceType::Block))
+        devices
+            .iter()
+            .any(|d| matches!(d.device_type, VirtIODeviceType::Block))
     }
 
     /// Check if network device is available
     pub fn has_network_device(&self) -> bool {
         let devices = self.devices.lock();
-        devices.iter().any(|d| matches!(d.device_type, VirtIODeviceType::Network))
+        devices
+            .iter()
+            .any(|d| matches!(d.device_type, VirtIODeviceType::Network))
     }
 
     /// Write to console device
     pub fn console_write(&self, data: &[u8]) -> Result<(), &'static str> {
         let mut devices = self.devices.lock();
-        
+
         for device in devices.iter_mut() {
             if matches!(device.device_type, VirtIODeviceType::Console) {
                 return device.console_write(data);
             }
         }
-        
+
         Err("No console device available")
     }
 
     /// Read from block device
     pub fn block_read(&self, sector: u64, buffer: &mut [u8]) -> Result<(), &'static str> {
         let mut devices = self.devices.lock();
-        
+
         for device in devices.iter_mut() {
             if matches!(device.device_type, VirtIODeviceType::Block) {
                 return device.block_read(sector, buffer);
             }
         }
-        
+
         Err("No block device available")
     }
 }

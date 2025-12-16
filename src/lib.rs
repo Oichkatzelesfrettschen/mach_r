@@ -5,8 +5,24 @@
 
 #![no_std]
 #![cfg_attr(not(test), no_main)]
-#![allow(dead_code)] // TODO: Remove once all features are implemented
+#![allow(dead_code)]
+// TODO: Remove once all features are implemented
 
+// Kernel-appropriate clippy configuration
+// Many kernel types have specialized initialization that doesn't fit Default
+#![allow(clippy::new_without_default)]
+// Hardware register code often uses explicit bit shifts for documentation
+#![allow(clippy::identity_op)]
+// Kernel code often needs explicit casts for memory-mapped I/O
+#![allow(clippy::unnecessary_cast)]
+// Manual ceiling division is clearer in memory allocation contexts
+#![allow(clippy::manual_div_ceil)]
+// Kernel IPC returns () errors for simple failure indication
+#![allow(clippy::result_unit_err)]
+// Large Message types in Result errors are intentional for IPC recovery
+#![allow(clippy::result_large_err)]
+// Large enum variants are expected for IPC message body types
+#![allow(clippy::large_enum_variant)]
 
 // #![feature(alloc_error_handler)] // Only on nightly
 
@@ -17,34 +33,42 @@ extern crate alloc;
 pub mod types;
 
 // Re-exports
-pub mod console;
-pub mod panic;
-pub mod ipc;
-pub mod memory;
-pub mod port;
-pub mod message;
-pub mod task;
-pub mod async_ipc;
-pub mod interrupt;
-pub mod scheduler;
-pub mod syscall;
-pub mod paging;
-pub mod external_pager;
 pub mod arch;
+pub mod async_ipc;
+pub mod console;
 pub mod drivers;
-pub mod mig;
-pub mod mach;
-pub mod trap;
-pub mod libc;
-pub mod servers;
+pub mod external_pager;
 pub mod init;
-pub mod utilities;
+pub mod interrupt;
+pub mod ipc;
+pub mod kern;
+pub mod libc;
+pub mod mach;
+pub mod memory;
+pub mod message;
+pub mod mig;
+pub mod paging;
+pub mod panic;
+pub mod port;
+pub mod scheduler;
+pub mod servers;
+pub mod sync;
+pub mod syscall;
+pub mod task;
+pub mod trap;
 pub mod userland;
+pub mod utilities;
 
 // Pure Rust stack components
-pub mod net;
 pub mod fs;
+pub mod net;
 pub mod vm;
+
+// Mach VM subsystem (separate from EVM vm module)
+pub mod mach_vm;
+
+// Mach Device subsystem
+pub mod device;
 
 // System components
 pub mod shell;
@@ -70,6 +94,12 @@ pub const NAME: &str = "Mach_R";
 
 /// Initialize the kernel library
 pub fn init() {
+    // Initialize kern subsystem (processors, timers, scheduling primitives)
+    kern::init();
+
+    // Initialize Mach VM subsystem
+    mach_vm::init();
+
     // Initialize pure Rust stack components
     if let Err(_e) = net::init() {
         // Handle network initialization error
@@ -89,7 +119,7 @@ pub fn init() {
     }
 
     // if let Err(_e) = build::init() {
-        // Handle build system initialization error
+    // Handle build system initialization error
     // }
 
     if let Err(_e) = coreutils::init() {
@@ -105,17 +135,17 @@ pub fn init() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     // Initialize allocator for tests
     fn init_test() {
         use core::sync::atomic::{AtomicBool, Ordering};
         static INIT: AtomicBool = AtomicBool::new(false);
-        
+
         if !INIT.swap(true, Ordering::SeqCst) {
             memory::init();
         }
     }
-    
+
     #[test]
     fn test_version() {
         init_test();

@@ -6,14 +6,14 @@
 //! - Message queuing
 //! - Notification mechanisms
 
-use alloc::sync::Arc;
-use alloc::collections::BTreeMap;
-use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
-use spin::Mutex;
-use heapless::Vec;
-use crate::types::{TaskId, PortId};
-use crate::message::{Message, MessageBody};
 use crate::message::PortRightType;
+use crate::message::{Message, MessageBody};
+use crate::types::{PortId, TaskId};
+use alloc::collections::BTreeMap;
+use alloc::sync::Arc;
+use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use heapless::Vec;
+use spin::Mutex;
 
 /// Maximum number of messages in a port queue
 const MAX_MESSAGES_PER_PORT: usize = 256;
@@ -42,7 +42,6 @@ pub struct PortRights {
     pub send_once_count: u32,
 }
 
-
 /// Message queue for a port
 pub struct MessageQueue {
     /// Queued messages
@@ -62,18 +61,18 @@ impl MessageQueue {
             limit: limit.min(MAX_MESSAGES_PER_PORT),
         }
     }
-    
+
     /// Enqueue a message
     pub fn enqueue(&self, msg: Message) -> Result<(), Message> {
         let mut queue = self.messages.lock();
         if queue.len() >= self.limit {
             return Err(msg); // Queue full
         }
-        queue.push(msg).map_err(|msg| msg)?;
+        queue.push(msg)?;
         self.count.fetch_add(1, Ordering::Relaxed);
         Ok(())
     }
-    
+
     /// Dequeue a message
     pub fn dequeue(&self) -> Option<Message> {
         let mut queue = self.messages.lock();
@@ -84,7 +83,7 @@ impl MessageQueue {
             None
         }
     }
-    
+
     /// Check if queue is empty
     pub fn is_empty(&self) -> bool {
         self.count.load(Ordering::Relaxed) == 0
@@ -95,25 +94,25 @@ impl MessageQueue {
 pub struct Port {
     /// Unique port identifier
     id: PortId,
-    
+
     /// Current port state
     state: Mutex<PortState>,
-    
+
     /// Send rights count
     send_rights: AtomicU32,
-    
+
     /// Send-once rights count
     send_once_rights: AtomicU32,
-    
+
     /// Message queue
     messages: MessageQueue,
-    
+
     /// Sequence number for message ordering
     sequence: AtomicU64,
-    
+
     /// No-senders notification port
     no_senders_notification: Mutex<Option<Arc<Port>>>,
-    
+
     /// Port death notification port
     port_death_notification: Mutex<Option<Arc<Port>>>,
     /// Dead-name subscribers (notified when port becomes dead or on send to dead)
@@ -125,7 +124,9 @@ impl Port {
     pub fn new(receiver: TaskId) -> Arc<Self> {
         let p = Arc::new(Port {
             id: PortId::new(),
-            state: Mutex::new(PortState::Active { receiver_task: receiver }),
+            state: Mutex::new(PortState::Active {
+                receiver_task: receiver,
+            }),
             send_rights: AtomicU32::new(0),
             send_once_rights: AtomicU32::new(0),
             messages: MessageQueue::new(256),
@@ -137,27 +138,27 @@ impl Port {
         register_global(&p);
         p
     }
-    
+
     /// Get port ID
     pub fn id(&self) -> PortId {
         self.id
     }
-    
+
     /// Get current state
     pub fn state(&self) -> PortState {
         *self.state.lock()
     }
-    
+
     /// Check if port is active
     pub fn is_active(&self) -> bool {
         matches!(*self.state.lock(), PortState::Active { .. })
     }
-    
+
     /// Add a send right
     pub fn add_send_right(&self) {
         self.send_rights.fetch_add(1, Ordering::Relaxed);
     }
-    
+
     /// Remove a send right
     pub fn remove_send_right(&self) -> u32 {
         let count = self.send_rights.fetch_sub(1, Ordering::Relaxed);
@@ -167,21 +168,25 @@ impl Port {
         }
         count - 1
     }
-    
+
     /// Add a send-once right
     pub fn add_send_once_right(&self) {
         self.send_once_rights.fetch_add(1, Ordering::Relaxed);
     }
-    
+
     /// Use a send-once right (consumes it)
     pub fn use_send_once_right(&self) -> bool {
-        self.send_once_rights.fetch_update(
-            Ordering::Relaxed,
-            Ordering::Relaxed,
-            |count| if count > 0 { Some(count - 1) } else { None }
-        ).is_ok()
+        self.send_once_rights
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |count| {
+                if count > 0 {
+                    Some(count - 1)
+                } else {
+                    None
+                }
+            })
+            .is_ok()
     }
-    
+
     /// Send a message to this port
     pub fn send(&self, msg: Message) -> Result<(), Message> {
         if !self.is_active() {
@@ -190,21 +195,30 @@ impl Port {
             return Err(msg); // Port is dead
         }
         // If this is a port-right transfer, apply right semantics
-        match &msg.body {
-            MessageBody::PortRight { port: _p, right_type } => {
-                match right_type {
-                    PortRightType::Send => { self.add_send_right(); },
-                    PortRightType::CopySend => { self.add_send_right(); },
-                    PortRightType::MakeSend => { self.add_send_right(); },
-                    PortRightType::SendOnce => { self.add_send_once_right(); },
-                    PortRightType::Receive => { /* receive right transfer not modeled */ },
+        if let MessageBody::PortRight {
+            port: _p,
+            right_type,
+        } = &msg.body
+        {
+            match right_type {
+                PortRightType::Send => {
+                    self.add_send_right();
                 }
+                PortRightType::CopySend => {
+                    self.add_send_right();
+                }
+                PortRightType::MakeSend => {
+                    self.add_send_right();
+                }
+                PortRightType::SendOnce => {
+                    self.add_send_once_right();
+                }
+                PortRightType::Receive => { /* receive right transfer not modeled */ }
             }
-            _ => {}
         }
         self.messages.enqueue(msg)
     }
-    
+
     /// Receive a message from this port
     pub fn receive(&self) -> Option<Message> {
         if !self.is_active() {
@@ -212,7 +226,7 @@ impl Port {
         }
         self.messages.dequeue()
     }
-    
+
     /// Destroy the port
     pub fn destroy(&self, timestamp: u64) {
         let mut state = self.state.lock();
@@ -220,12 +234,12 @@ impl Port {
         // Trigger port death notification
         self.notify_port_death();
     }
-    
+
     /// Set no-senders notification port
     pub fn set_no_senders_notification(&self, port: Option<Arc<Port>>) {
         *self.no_senders_notification.lock() = port;
     }
-    
+
     /// Set port death notification port
     pub fn set_port_death_notification(&self, port: Option<Arc<Port>>) {
         *self.port_death_notification.lock() = port;
@@ -236,7 +250,7 @@ impl Port {
         let mut subs = self.dead_name_subscribers.lock();
         let _ = subs.push(notify);
     }
-    
+
     /// Notify no senders
     fn notify_no_senders(&self) {
         if let Some(ref port) = *self.no_senders_notification.lock() {
@@ -246,7 +260,7 @@ impl Port {
             }
         }
     }
-    
+
     /// Notify port death
     fn notify_port_death(&self) {
         if let Some(ref port) = *self.port_death_notification.lock() {
@@ -276,47 +290,52 @@ pub fn init() {
 mod tests {
     use super::*;
     use alloc::sync::Arc as StdArc;
-    
+
     #[test]
     fn test_port_creation() {
         let task_id = TaskId(1);
         let port = Port::new(task_id);
-        
+
         assert!(port.is_active());
-        assert_eq!(port.state(), PortState::Active { receiver_task: task_id });
+        assert_eq!(
+            port.state(),
+            PortState::Active {
+                receiver_task: task_id
+            }
+        );
     }
-    
+
     #[test]
     fn test_send_rights() {
         let port = Port::new(TaskId(1));
-        
+
         port.add_send_right();
         port.add_send_right();
         assert_eq!(port.send_rights.load(Ordering::Relaxed), 2);
-        
+
         port.remove_send_right();
         assert_eq!(port.send_rights.load(Ordering::Relaxed), 1);
     }
-    
+
     #[test]
     fn test_message_send_receive() {
         let port = Port::new(TaskId(1));
-        
+
         let msg = Message::new_inline(port.id(), b"test").unwrap();
-        
+
         assert!(port.send(msg).is_ok());
         assert!(port.receive().is_some());
         assert!(port.receive().is_none()); // Queue should be empty
     }
-    
+
     #[test]
     fn test_port_destruction() {
         let port = Port::new(TaskId(1));
-        
+
         port.destroy(12345);
         assert!(!port.is_active());
         assert_eq!(port.state(), PortState::Dead { timestamp: 12345 });
-        
+
         // Can't send to dead port
         let msg = Message::new_inline(port.id(), b"test").unwrap();
         assert!(port.send(msg).is_err());
@@ -335,7 +354,9 @@ mod tests {
         // Notification should be enqueued on notify port
         let msg = notify.receive();
         assert!(msg.is_some());
-        if let Some(m) = msg { assert_eq!(m.data(), b"no_senders"); }
+        if let Some(m) = msg {
+            assert_eq!(m.data(), b"no_senders");
+        }
     }
 
     #[test]
@@ -350,7 +371,9 @@ mod tests {
         assert!(p.send(msg).is_err());
         let note = subscriber.receive();
         assert!(note.is_some());
-        if let Some(m) = note { assert_eq!(m.data(), b"dead_name"); }
+        if let Some(m) = note {
+            assert_eq!(m.data(), b"dead_name");
+        }
     }
 }
 
@@ -365,17 +388,17 @@ impl PortRegistry {
             ports: Mutex::new(alloc::collections::BTreeMap::new()),
         }
     }
-    
+
     pub fn register_port(&self, name: &str, port_id: PortId) {
         let mut ports = self.ports.lock();
         ports.insert(alloc::string::String::from(name), port_id);
     }
-    
+
     pub fn lookup_port(&self, name: &str) -> Option<PortId> {
         let ports = self.ports.lock();
         ports.get(name).copied()
     }
-    
+
     pub fn unregister_port(&self, name: &str) -> Option<PortId> {
         let mut ports = self.ports.lock();
         ports.remove(name)

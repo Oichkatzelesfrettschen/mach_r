@@ -30,20 +30,12 @@ impl PreprocessorExpr {
     /// Evaluate the expression with a symbol table
     pub fn eval(&self, symbols: &SymbolTable) -> bool {
         match self {
-            PreprocessorExpr::Symbol(name) => {
-                symbols.get(name).as_bool()
-            }
+            PreprocessorExpr::Symbol(name) => symbols.get(name).as_bool(),
             PreprocessorExpr::Constant(val) => *val,
             PreprocessorExpr::Not(expr) => !expr.eval(symbols),
-            PreprocessorExpr::Or(left, right) => {
-                left.eval(symbols) || right.eval(symbols)
-            }
-            PreprocessorExpr::And(left, right) => {
-                left.eval(symbols) && right.eval(symbols)
-            }
-            PreprocessorExpr::Defined(name) => {
-                symbols.is_defined(name)
-            }
+            PreprocessorExpr::Or(left, right) => left.eval(symbols) || right.eval(symbols),
+            PreprocessorExpr::And(left, right) => left.eval(symbols) && right.eval(symbols),
+            PreprocessorExpr::Defined(name) => symbols.is_defined(name),
         }
     }
 }
@@ -271,7 +263,9 @@ mod tests {
         let expr = parse_directive("#if !defined(MACH_IPC_DEBUG)").unwrap();
         assert_eq!(
             expr,
-            PreprocessorExpr::Not(Box::new(PreprocessorExpr::Defined("MACH_IPC_DEBUG".to_string())))
+            PreprocessorExpr::Not(Box::new(PreprocessorExpr::Defined(
+                "MACH_IPC_DEBUG".to_string()
+            )))
         );
 
         let symbols = SymbolTable::new();

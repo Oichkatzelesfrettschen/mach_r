@@ -1,8 +1,8 @@
 //! Mach-style message structure
 
-use alloc::vec::Vec;
+use super::PortName;
 use alloc::vec;
-use super::{PortName};
+use alloc::vec::Vec;
 
 /// Message type identifier
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -31,7 +31,7 @@ pub struct MessageHeader {
 impl MessageHeader {
     const BITS_COMPLEX: u32 = 0x80000000;
     const BITS_SIMPLE: u32 = 0x00000000;
-    
+
     pub fn new_simple(size: u32, remote: PortName, local: PortName, id: u32) -> Self {
         Self {
             bits: Self::BITS_SIMPLE,
@@ -41,7 +41,7 @@ impl MessageHeader {
             id,
         }
     }
-    
+
     pub fn is_complex(&self) -> bool {
         self.bits & Self::BITS_COMPLEX != 0
     }
@@ -52,7 +52,7 @@ impl MessageHeader {
 #[derive(Debug, Clone)]
 pub struct PortDescriptor {
     pub name: PortName,
-    pub disposition: u32,  // MOVE, COPY, MAKE_SEND, etc
+    pub disposition: u32, // MOVE, COPY, MAKE_SEND, etc
     pub type_: u32,
 }
 
@@ -93,17 +93,17 @@ impl Message {
             body: MessageBody::Simple(data),
         }
     }
-    
+
     /// Create a notification message
     pub fn new_notification(port: PortName, id: u32) -> Self {
         Self::new_simple(port, PortName::NULL, id, Vec::new())
     }
-    
+
     /// Get total message size
     pub fn size(&self) -> usize {
         self.header.size as usize
     }
-    
+
     /// Add a port descriptor (makes message complex)
     pub fn add_port(&mut self, port: PortName, disposition: u32) {
         match &mut self.body {
@@ -121,7 +121,9 @@ impl Message {
                 };
                 self.header.bits |= MessageHeader::BITS_COMPLEX;
             }
-            MessageBody::Complex { port_descriptors, .. } => {
+            MessageBody::Complex {
+                port_descriptors, ..
+            } => {
                 port_descriptors.push(PortDescriptor {
                     name: port,
                     disposition,
@@ -130,7 +132,7 @@ impl Message {
             }
         }
     }
-    
+
     /// Add out-of-line memory
     pub fn add_memory(&mut self, addr: usize, size: usize) {
         match &mut self.body {
@@ -147,7 +149,9 @@ impl Message {
                 };
                 self.header.bits |= MessageHeader::BITS_COMPLEX;
             }
-            MessageBody::Complex { memory_descriptors, .. } => {
+            MessageBody::Complex {
+                memory_descriptors, ..
+            } => {
                 memory_descriptors.push(MemoryDescriptor {
                     address: addr,
                     size,

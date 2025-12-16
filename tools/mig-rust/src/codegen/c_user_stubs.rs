@@ -1,8 +1,8 @@
 //! Complete C user stub generation with message packing
 
-use crate::semantic::{AnalyzedSubsystem, AnalyzedRoutine};
-use crate::parser::ast::Direction;
 use super::CodegenError;
+use crate::parser::ast::Direction;
+use crate::semantic::{AnalyzedRoutine, AnalyzedSubsystem};
 
 pub struct CUserStubGenerator {
     _user_prefix: String,
@@ -20,7 +20,10 @@ impl CUserStubGenerator {
         let mut output = String::new();
 
         // Header comment
-        output.push_str(&format!("/* User stubs for {} subsystem */\n\n", analyzed.name));
+        output.push_str(&format!(
+            "/* User stubs for {} subsystem */\n\n",
+            analyzed.name
+        ));
         output.push_str(&format!("#include \"{}.h\"\n", analyzed.name));
         output.push_str("#include <mach/message.h>\n");
         output.push_str("#include <mach/mach_init.h>\n");
@@ -47,10 +50,20 @@ impl CUserStubGenerator {
 
         for arg in &routine.routine.args {
             // Check if this is an array parameter by checking the message layout
-            let is_array_in_request = routine.request_layout.fields.iter()
+            let is_array_in_request = routine
+                .request_layout
+                .fields
+                .iter()
                 .any(|f| f.name == arg.name && f.is_array);
-            let is_array_in_reply = routine.reply_layout.as_ref()
-                .map(|layout| layout.fields.iter().any(|f| f.name == arg.name && f.is_array))
+            let is_array_in_reply = routine
+                .reply_layout
+                .as_ref()
+                .map(|layout| {
+                    layout
+                        .fields
+                        .iter()
+                        .any(|f| f.name == arg.name && f.is_array)
+                })
                 .unwrap_or(false);
 
             let is_array = is_array_in_request || is_array_in_reply;
@@ -58,10 +71,17 @@ impl CUserStubGenerator {
             // Get the resolved C type from the message layout
             let base_type = if is_array {
                 // For arrays, get the element type from the layout
-                let field_in_request = routine.request_layout.fields.iter()
+                let field_in_request = routine
+                    .request_layout
+                    .fields
+                    .iter()
                     .find(|f| f.name == arg.name && f.is_array);
-                let field_in_reply = routine.reply_layout.as_ref()
-                    .and_then(|layout| layout.fields.iter().find(|f| f.name == arg.name && f.is_array));
+                let field_in_reply = routine.reply_layout.as_ref().and_then(|layout| {
+                    layout
+                        .fields
+                        .iter()
+                        .find(|f| f.name == arg.name && f.is_array)
+                });
 
                 let field = field_in_request.or(field_in_reply);
                 if let Some(f) = field {
@@ -69,7 +89,10 @@ impl CUserStubGenerator {
                     f.c_type.trim_end_matches('*').trim().to_string()
                 } else {
                     // Fallback to AST type
-                    self.get_c_type_for_arg(arg).trim_end_matches('*').trim().to_string()
+                    self.get_c_type_for_arg(arg)
+                        .trim_end_matches('*')
+                        .trim()
+                        .to_string()
                 }
             } else {
                 // For non-arrays, use AST type
@@ -115,7 +138,11 @@ impl CUserStubGenerator {
     }
 
     /// Generate a single user stub
-    fn generate_user_stub(&self, routine: &AnalyzedRoutine, _subsystem_name: &str) -> Result<String, CodegenError> {
+    fn generate_user_stub(
+        &self,
+        routine: &AnalyzedRoutine,
+        _subsystem_name: &str,
+    ) -> Result<String, CodegenError> {
         let mut output = String::new();
 
         // Function signature
@@ -146,7 +173,10 @@ impl CUserStubGenerator {
         output.push_str("    mach_port_t reply_port;\n\n");
 
         // Get server port (first argument)
-        let server_port = routine.routine.args.first()
+        let server_port = routine
+            .routine
+            .args
+            .first()
             .map(|arg| arg.name.as_str())
             .unwrap_or("MACH_PORT_NULL");
 
@@ -154,10 +184,16 @@ impl CUserStubGenerator {
         output.push_str("    /* Initialize request */\n");
         output.push_str(&format!("    Mess.In.Head.msgh_bits = MACH_MSGH_BITS(MACH_MSG_TYPE_COPY_SEND, MACH_MSG_TYPE_MAKE_SEND_ONCE);\n"));
         output.push_str(&format!("    Mess.In.Head.msgh_size = sizeof(Request);\n"));
-        output.push_str(&format!("    Mess.In.Head.msgh_remote_port = {};\n", server_port));
+        output.push_str(&format!(
+            "    Mess.In.Head.msgh_remote_port = {};\n",
+            server_port
+        ));
         output.push_str("    reply_port = mig_get_reply_port();\n");
         output.push_str("    Mess.In.Head.msgh_local_port = reply_port;\n");
-        output.push_str(&format!("    Mess.In.Head.msgh_id = {};\n\n", routine.number));
+        output.push_str(&format!(
+            "    Mess.In.Head.msgh_id = {};\n\n",
+            routine.number
+        ));
 
         // Pack input arguments
         output.push_str(&self.generate_input_packing(routine)?);
@@ -203,7 +239,10 @@ impl CUserStubGenerator {
     }
 
     /// Generate message structure definitions
-    fn generate_message_structures(&self, routine: &AnalyzedRoutine) -> Result<String, CodegenError> {
+    fn generate_message_structures(
+        &self,
+        routine: &AnalyzedRoutine,
+    ) -> Result<String, CodegenError> {
         let mut output = String::new();
 
         // Request structure
@@ -255,19 +294,34 @@ impl CUserStubGenerator {
                 let base_name = field.name.strip_suffix("Type").unwrap_or(&field.name);
 
                 // Find the corresponding data field to get its mach_type
-                let data_field = routine.request_layout.fields.iter()
+                let data_field = routine
+                    .request_layout
+                    .fields
+                    .iter()
                     .find(|f| f.name == base_name && !f.is_type_descriptor)
                     .unwrap_or(field);
 
                 let mach_const = data_field.mach_type.to_mach_constant();
                 let bit_size = data_field.mach_type.bit_size();
 
-                output.push_str(&format!("    Mess.In.{}.msgt_name = {};\n", field.name, mach_const));
-                output.push_str(&format!("    Mess.In.{}.msgt_size = {};\n", field.name, bit_size));
+                output.push_str(&format!(
+                    "    Mess.In.{}.msgt_name = {};\n",
+                    field.name, mach_const
+                ));
+                output.push_str(&format!(
+                    "    Mess.In.{}.msgt_size = {};\n",
+                    field.name, bit_size
+                ));
                 output.push_str(&format!("    Mess.In.{}.msgt_number = 1;\n", field.name));
                 output.push_str(&format!("    Mess.In.{}.msgt_inline = TRUE;\n", field.name));
-                output.push_str(&format!("    Mess.In.{}.msgt_longform = FALSE;\n", field.name));
-                output.push_str(&format!("    Mess.In.{}.msgt_deallocate = FALSE;\n", field.name));
+                output.push_str(&format!(
+                    "    Mess.In.{}.msgt_longform = FALSE;\n",
+                    field.name
+                ));
+                output.push_str(&format!(
+                    "    Mess.In.{}.msgt_deallocate = FALSE;\n",
+                    field.name
+                ));
                 output.push_str(&format!("    Mess.In.{}.msgt_unused = 0;\n", field.name));
             } else if field.is_count_field {
                 // Count field - use the actual count parameter
@@ -277,8 +331,10 @@ impl CUserStubGenerator {
                 output.push_str(&format!("    Mess.In.{} = {};\n", field.name, field.name));
             } else {
                 // Array data field - for inline arrays, assign pointer directly
-                output.push_str(&format!("    Mess.In.{} = (typeof(Mess.In.{})){};\n",
-                    field.name, field.name, field.name));
+                output.push_str(&format!(
+                    "    Mess.In.{} = (typeof(Mess.In.{})){};\n",
+                    field.name, field.name, field.name
+                ));
             }
         }
 
@@ -302,12 +358,20 @@ impl CUserStubGenerator {
                 if field.is_count_field {
                     // This is a count field - extract and set the count parameter from type descriptor
                     let array_name = field.name.strip_suffix("Cnt").unwrap_or(&field.name);
-                    output.push_str(&format!("    *{}Cnt = Mess.Out.{}Type.msgt_number;\n", array_name, array_name));
+                    output.push_str(&format!(
+                        "    *{}Cnt = Mess.Out.{}Type.msgt_number;\n",
+                        array_name, array_name
+                    ));
                 } else if field.is_array {
                     // For OUT arrays: Note that proper inline array support requires
                     // message structure changes. For now, this is a placeholder.
-                    output.push_str(&format!("    /* TODO: Implement proper inline array unpacking for {} */\n", field.name));
-                    output.push_str(&format!("    /* Would need memcpy from inline message data */\n"));
+                    output.push_str(&format!(
+                        "    /* TODO: Implement proper inline array unpacking for {} */\n",
+                        field.name
+                    ));
+                    output.push_str(&format!(
+                        "    /* Would need memcpy from inline message data */\n"
+                    ));
                 } else {
                     // Regular scalar output parameter
                     output.push_str(&format!("    *{} = Mess.Out.{};\n", field.name, field.name));
@@ -322,13 +386,11 @@ impl CUserStubGenerator {
     /// Get C type for an argument
     fn get_c_type_for_arg(&self, arg: &crate::parser::ast::Argument) -> String {
         match &arg.arg_type {
-            crate::parser::ast::TypeSpec::Basic(name) => {
-                match name.as_str() {
-                    "int32_t" | "int" => "int32_t".to_string(),
-                    "mach_port_t" => "mach_port_t".to_string(),
-                    _ => name.clone(),
-                }
-            }
+            crate::parser::ast::TypeSpec::Basic(name) => match name.as_str() {
+                "int32_t" | "int" => "int32_t".to_string(),
+                "mach_port_t" => "mach_port_t".to_string(),
+                _ => name.clone(),
+            },
             _ => "int32_t".to_string(),
         }
     }

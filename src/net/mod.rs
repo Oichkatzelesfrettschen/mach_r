@@ -25,7 +25,7 @@ impl Default for NetworkConfig {
         dns_servers.push([8, 8, 8, 8]).ok();
         dns_servers.push([8, 8, 4, 4]).ok();
         dns_servers.push([1, 1, 1, 1]).ok();
-        
+
         Self {
             ip_addr: [192, 168, 1, 100],
             subnet_mask: [255, 255, 255, 0],
@@ -39,9 +39,9 @@ impl Default for NetworkConfig {
 pub fn init() -> Result<(), &'static str> {
     // Initialize smoltcp TCP/IP stack
     tcp::init()?;
-    
+
     // Initialize SSH server
     ssh::init()?;
-    
+
     Ok(())
 }

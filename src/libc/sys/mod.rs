@@ -1,7 +1,7 @@
 //! POSIX sys/ system headers
 
-pub mod types;
 pub mod stat;
+pub mod types;
 
-pub use types::*;
 pub use stat::*;
+pub use types::*;

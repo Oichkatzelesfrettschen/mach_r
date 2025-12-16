@@ -17,7 +17,10 @@ impl Parser {
             .filter(|t| !matches!(t, Token::Comment | Token::Preprocessor(_)))
             .collect();
 
-        Self { tokens, position: 0 }
+        Self {
+            tokens,
+            position: 0,
+        }
     }
 
     /// Parse a complete .defs file
@@ -94,9 +97,15 @@ impl Parser {
             Some(Token::Keyword(Keyword::SimpleRoutine)) => {
                 Ok(Statement::SimpleRoutine(self.parse_simple_routine()?))
             }
-            Some(Token::Keyword(Keyword::Import)) => Ok(Statement::Import(self.parse_import(ImportKind::Normal)?)),
-            Some(Token::Keyword(Keyword::UImport)) => Ok(Statement::Import(self.parse_import(ImportKind::User)?)),
-            Some(Token::Keyword(Keyword::SImport)) => Ok(Statement::Import(self.parse_import(ImportKind::Server)?)),
+            Some(Token::Keyword(Keyword::Import)) => {
+                Ok(Statement::Import(self.parse_import(ImportKind::Normal)?))
+            }
+            Some(Token::Keyword(Keyword::UImport)) => {
+                Ok(Statement::Import(self.parse_import(ImportKind::User)?))
+            }
+            Some(Token::Keyword(Keyword::SImport)) => {
+                Ok(Statement::Import(self.parse_import(ImportKind::Server)?))
+            }
             Some(Token::Keyword(Keyword::Skip)) => {
                 self.advance();
                 self.expect_symbol(Symbol::Semicolon)?;
@@ -140,7 +149,11 @@ impl Parser {
 
         self.expect_symbol(Symbol::Semicolon)?;
 
-        Ok(TypeDecl { name, spec, annotations })
+        Ok(TypeDecl {
+            name,
+            spec,
+            annotations,
+        })
     }
 
     /// Parse type specification
@@ -515,7 +528,11 @@ pub struct ParseError {
 
 impl std::fmt::Display for ParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Parse error at position {}: {}", self.position, self.message)
+        write!(
+            f,
+            "Parse error at position {}: {}",
+            self.position, self.message
+        )
     }
 }
 

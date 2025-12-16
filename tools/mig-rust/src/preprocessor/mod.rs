@@ -4,12 +4,12 @@
 //! This is a simplified preprocessor focused on the patterns used in Mach .defs files.
 
 pub mod expr;
-pub mod symbols;
 pub mod filter;
+pub mod symbols;
 
-pub use expr::{PreprocessorExpr, ExprParser};
+pub use expr::{ExprParser, PreprocessorExpr};
+pub use filter::{PreprocessorError, PreprocessorFilter};
 pub use symbols::{SymbolTable, SymbolValue};
-pub use filter::{PreprocessorFilter, PreprocessorError};
 
 /// Configuration for preprocessor evaluation
 #[derive(Debug, Clone)]
@@ -47,7 +47,14 @@ impl PreprocessorConfig {
 
     /// Define a symbol with a boolean value
     pub fn define(&mut self, name: &str, value: bool) -> &mut Self {
-        self.symbols.define(name, if value { SymbolValue::True } else { SymbolValue::False });
+        self.symbols.define(
+            name,
+            if value {
+                SymbolValue::True
+            } else {
+                SymbolValue::False
+            },
+        );
         self
     }
 
